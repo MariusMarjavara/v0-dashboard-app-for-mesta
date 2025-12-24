@@ -41,8 +41,8 @@ export async function DELETE(request: Request) {
     // Slett fil fra storage
     const { error: storageError } = await supabase.storage.from("registrations").remove([document.file_path])
 
+    // Storage delete failed, but continue with database deletion
     if (storageError) {
-      console.error("[v0] Storage delete error:", storageError)
     }
 
     // Slett fra database
@@ -54,7 +54,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("[v0] Delete error:", error)
     return NextResponse.json({ error: "Intern serverfeil" }, { status: 500 })
   }
 }

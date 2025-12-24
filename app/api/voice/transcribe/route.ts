@@ -22,12 +22,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       transcript: result.text,
-      text: result.text, // Include both for backward compatibility
+      text: result.text,
       confidence: result.confidence ?? null,
       language: result.language ?? "no",
     })
   } catch (error: any) {
-    console.error("[v0] Transcription error:", error)
     return NextResponse.json(
       {
         error: "Transcription failed",

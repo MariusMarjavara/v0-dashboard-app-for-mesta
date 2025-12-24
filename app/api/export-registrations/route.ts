@@ -61,7 +61,6 @@ export async function GET(request: Request) {
   const { data: registrations, error } = await query
 
   if (error) {
-    console.error("[v0] Export error:", error)
     return new NextResponse("Error fetching registrations", { status: 500 })
   }
 
@@ -211,7 +210,6 @@ export async function GET(request: Request) {
     })
 
     if (uploadError) {
-      console.error("[v0] Upload error:", uploadError)
     } else {
       // Logg eksporten
       await supabase.from("export_logs").insert({

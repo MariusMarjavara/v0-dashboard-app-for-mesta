@@ -53,7 +53,6 @@ export async function GET(request: Request) {
   const { data: registrations, error } = await query
 
   if (error) {
-    console.error("[v0] Error fetching registrations:", error)
     return new NextResponse("Error fetching registrations", { status: 500 })
   }
 
@@ -80,7 +79,6 @@ export async function GET(request: Request) {
               const afterSign = img.url.substring(signIndex + signPattern.length)
               // Fjern query parameters (alt etter ?)
               storagePath = afterSign.split("?")[0]
-              console.log("[v0] Parsed storage path:", storagePath)
             }
           }
 
@@ -95,15 +93,14 @@ export async function GET(request: Request) {
               const fileName = storagePath.split("/").pop() || `image_${imageCount + 1}.jpg`
               zip.folder(folderName)?.file(fileName, buffer)
               imageCount++
-              console.log("[v0] Successfully added image:", fileName)
             } else {
-              console.error("[v0] Error downloading image:", imgError?.message || "No image data")
+              console.error("Error downloading image:", imgError?.message || "No image data")
             }
           } else {
-            console.error("[v0] Could not extract storage path from URL:", img.url)
+            console.error("Could not extract storage path from URL:", img.url)
           }
         } catch (err) {
-          console.error("[v0] Error downloading image:", err)
+          console.error("Error downloading image:", err)
         }
       }
     } else if (reg.data?.full_images && Array.isArray(reg.data.full_images) && reg.data.full_images.length > 0) {
@@ -121,11 +118,10 @@ export async function GET(request: Request) {
               const fileName = img.storage_path.split("/").pop() || `image_${imageCount + 1}.jpg`
               zip.folder(folderName)?.file(fileName, buffer)
               imageCount++
-              console.log("[v0] Successfully added image:", fileName)
             }
           }
         } catch (err) {
-          console.error("[v0] Error downloading image:", err)
+          console.error("Error downloading image:", err)
         }
       }
     }

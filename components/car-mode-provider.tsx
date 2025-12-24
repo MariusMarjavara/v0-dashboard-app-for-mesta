@@ -14,6 +14,15 @@ const CarModeContext = createContext<CarModeContextType>({
   toggleCarMode: () => {},
 })
 
+export const CAR_MODE_RULES = {
+  allowTextInput: false,
+  allowDropdowns: false,
+  requireVoice: true,
+  requireLongPress: true,
+  longPressMs: 600,
+  hapticFeedback: true,
+}
+
 export function CarModeProvider({ children }: { children: React.ReactNode }) {
   const [carMode, setCarMode] = useState(true)
 
@@ -36,3 +45,12 @@ export function CarModeProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useCarMode = () => useContext(CarModeContext)
+
+export const useCarModeInputCheck = () => {
+  const { carMode } = useCarMode()
+  return {
+    shouldDisableTextInput: carMode && !CAR_MODE_RULES.allowTextInput,
+    shouldDisableDropdown: carMode && !CAR_MODE_RULES.allowDropdowns,
+    requireVoiceInput: carMode && CAR_MODE_RULES.requireVoice,
+  }
+}

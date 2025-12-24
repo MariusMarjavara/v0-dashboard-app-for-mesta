@@ -34,7 +34,7 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       if (navigator.vibrate) navigator.vibrate(100)
       setRecording(true)
     } catch (error) {
-      console.error("[v0] Failed to start recording:", error)
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200])
     }
   }
 

@@ -49,7 +49,6 @@ export async function POST(request: Request) {
     })
 
     if (uploadError) {
-      console.error("[v0] Upload error:", uploadError)
       return NextResponse.json({ error: "Feil ved opplasting av fil" }, { status: 500 })
     }
 
@@ -71,7 +70,6 @@ export async function POST(request: Request) {
       .single()
 
     if (dbError) {
-      console.error("[v0] Database error:", dbError)
       // Slett filen hvis database-insert feiler
       await supabase.storage.from("registrations").remove([filePath])
       return NextResponse.json({ error: "Feil ved lagring av dokumentmetadata" }, { status: 500 })
@@ -79,7 +77,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, document })
   } catch (error) {
-    console.error("[v0] Upload error:", error)
     return NextResponse.json({ error: "Intern serverfeil" }, { status: 500 })
   }
 }

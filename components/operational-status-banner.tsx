@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { AlertTriangle, XCircle } from "lucide-react"
 import { OPERATIONAL_STATUS_CONFIG } from "@/lib/types"
 
 export function OperationalStatusBanner() {
   const [status, setStatus] = useState<string>("NORMAL DRIFT")
   const [severity, setSeverity] = useState<"normal" | "warning" | "critical">("normal")
+  const lastVibrateRef = useRef<string>("")
 
   useEffect(() => {
     const checkStatus = () => {
@@ -29,6 +30,11 @@ export function OperationalStatusBanner() {
           } else {
             setSeverity("normal")
           }
+
+          if (lastVibrateRef.current !== newStatus && navigator.vibrate) {
+            navigator.vibrate([200, 100, 200])
+            lastVibrateRef.current = newStatus
+          }
         }
       }
     }
@@ -45,9 +51,9 @@ export function OperationalStatusBanner() {
   const Icon = severity === "critical" ? XCircle : AlertTriangle
 
   return (
-    <div className={`${bgColor} text-white text-center py-3 font-bold flex items-center justify-center gap-2`}>
-      <Icon className="h-5 w-5" />
-      {status}
+    <div className={`${bgColor} text-white text-center py-4 text-xl font-bold flex items-center justify-center gap-2`}>
+      <Icon className="h-6 w-6" />
+      <span>🚧 {status}</span>
     </div>
   )
 }

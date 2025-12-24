@@ -27,6 +27,9 @@ import { getAppsForUser } from "@/lib/apps"
 import { createClient } from "@/lib/supabase/client"
 import { LogOut, User, MapPin, QrCode } from "lucide-react"
 import { toast } from "sonner"
+import { getRegistrationCardsForUser } from "@/lib/registration-cards"
+import { BottomNav } from "@/components/bottom-nav"
+import { VoiceConfirm } from "@/components/voice-confirm"
 
 type ActiveForm = null | "friksjon" | "maskin" | "vinter" | "innkjop" | "utbedring" | "arbeidsdok"
 
@@ -37,48 +40,6 @@ interface DashboardContentProps {
   userEmail: string
   contractArea: string
   contractAreaId: string
-}
-
-const getAllRegistrationCards = (userType: "mesta" | "ue") => {
-  const baseCards = [
-    {
-      id: "arbeidsdok",
-      title: "Arbeidsdokumentering",
-      description: "Bilder og ressursbruk for oppdrag på kontrakten",
-      icon: "arbeidsdok" as const,
-    },
-    {
-      id: "friksjon",
-      title: "Friksjonsmålinger",
-      description: "Registrer friksjonsmålinger og tiltak",
-      icon: "friksjon" as const,
-    },
-    {
-      id: "vinter",
-      title: "Manuelt vinterarbeid",
-      description: "Brøytestikk, skiltkosting, leskur m.m.",
-      icon: "vinter" as const,
-    },
-  ]
-
-  if (userType === "mesta") {
-    baseCards.push(
-      {
-        id: "innkjop",
-        title: "Innkjøp",
-        description: "Registrer innkjøp og utgifter",
-        icon: "innkjop" as const,
-      },
-      {
-        id: "maskin",
-        title: "Maskinoppfølgning",
-        description: "Innleid maskin - vedlikehold og forbruksvarer",
-        icon: "maskin" as const,
-      },
-    )
-  }
-
-  return baseCards
 }
 
 export function DashboardContent({
@@ -201,12 +162,14 @@ export function DashboardContent({
     }
   }
 
-  const registrationCards = getAllRegistrationCards(userType)
+  const registrationCards = getRegistrationCardsForUser(userType)
   const filteredApps = getAppsForUser(userType, contractType || undefined)
 
   const [voiceFlowActive, setVoiceFlowActive] = useState(false)
   const [voiceTranscript, setVoiceTranscript] = useState("")
   const [voiceAudioBlob, setVoiceAudioBlob] = useState<Blob | null>(null)
+  const [voiceConfirmData, setVoiceConfirmData] = useState<Record<string, string> | null>(null)
+  const [activeNavSection, setActiveNavSection] = useState<"status" | "voice" | "camera" | "log">("status")
   const { carMode } = useCarMode()
 
   const handleVoiceFinished = async (blob: Blob) => {
@@ -226,27 +189,30 @@ export function DashboardContent({
         const data = await response.json()
         setVoiceTranscript(data.text || "")
       }
-    } catch (error) {
-      console.error("[v0] Transcription failed:", error)
-    }
+    } catch (error) {}
 
     setVoiceFlowActive(true)
   }
 
   const handleVoiceFlowComplete = async (data: Record<string, string>) => {
-    if (!voiceAudioBlob) return
+    setVoiceConfirmData(data)
+    setVoiceFlowActive(false)
+  }
+
+  const handleVoiceConfirm = async () => {
+    if (!voiceAudioBlob || !voiceConfirmData) return
 
     const metadata = {
-      type: data.type === "ja" ? "loggbok" : "notat",
+      type: voiceConfirmData.type === "ja" ? "loggbok" : "notat",
       userId,
       contractArea,
       contractNummer,
       timestamp: new Date().toISOString(),
       transcript: voiceTranscript,
-      vakttlf: data.vakttlf === "ja",
-      ringer: data.caller,
-      hendelse: data.reason,
-      tiltak: data.action,
+      vakttlf: voiceConfirmData.vakttlf === "ja",
+      ringer: voiceConfirmData.caller,
+      hendelse: voiceConfirmData.reason,
+      tiltak: voiceConfirmData.action,
     }
 
     const formData = new FormData()
@@ -261,13 +227,14 @@ export function DashboardContent({
 
       if (response.ok) {
         toast.success("Voice memo lagret!")
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100])
       }
     } catch (error) {
-      console.error("[v0] Upload failed:", error)
       toast.error("Kunne ikke lagre voice memo")
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200])
     }
 
-    setVoiceFlowActive(false)
+    setVoiceConfirmData(null)
     setVoiceTranscript("")
     setVoiceAudioBlob(null)
   }
@@ -276,6 +243,24 @@ export function DashboardContent({
     setVoiceFlowActive(false)
     setVoiceTranscript("")
     setVoiceAudioBlob(null)
+  }
+
+  const handleNavigation = (section: "status" | "voice" | "camera" | "log") => {
+    setActiveNavSection(section)
+
+    if (section === "voice" && !voiceFlowActive) {
+      if (navigator.vibrate) navigator.vibrate(50)
+    }
+  }
+
+  const buildVoiceSummary = (data: Record<string, string>) => {
+    const parts = []
+    if (data.type === "ja") parts.push("Loggbok:")
+    if (data.vakttlf === "ja") parts.push("• Vaktelefon")
+    if (data.caller) parts.push(`• ${data.caller}`)
+    if (data.reason) parts.push(`• ${data.reason}`)
+    if (data.action) parts.push(`• ${data.action}`)
+    return parts.join("\n")
   }
 
   return (
@@ -429,7 +414,7 @@ export function DashboardContent({
       </main>
 
       {/* VoiceMemo Floating Button */}
-      {!activeForm && !showSuccess && !needsName && !voiceFlowActive && (
+      {!activeForm && !showSuccess && !needsName && !voiceFlowActive && !voiceConfirmData && (
         <>
           {carMode ? (
             <VoiceButton onFinished={handleVoiceFinished} disabled={false} />
@@ -441,6 +426,16 @@ export function DashboardContent({
 
       {voiceFlowActive && (
         <VoiceFlow transcript={voiceTranscript} onComplete={handleVoiceFlowComplete} onCancel={handleVoiceFlowCancel} />
+      )}
+
+      {/* Voice Confirmation Screen */}
+      {voiceConfirmData && (
+        <VoiceConfirm summary={buildVoiceSummary(voiceConfirmData)} onConfirm={handleVoiceConfirm} />
+      )}
+
+      {/* Bottom Navigation for Car Mode */}
+      {carMode && !activeForm && !showSuccess && !needsName && (
+        <BottomNav onNavigate={handleNavigation} activeSection={activeNavSection} />
       )}
     </div>
   )
