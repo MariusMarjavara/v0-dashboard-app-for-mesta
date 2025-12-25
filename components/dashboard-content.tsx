@@ -30,8 +30,17 @@ import { toast } from "sonner"
 import { getRegistrationCardsForUser } from "@/lib/registration-cards"
 import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
+import dynamic from "next/dynamic"
+import { LastIncidentBanner } from "@/components/last-incident-banner" // Import LastIncidentBanner
 
-type ActiveForm = null | "friksjon" | "maskin" | "vinter" | "innkjop" | "utbedring" | "arbeidsdok"
+const IncidentMapDynamic = dynamic(() => import("@/components/incident-map").then((mod) => mod.IncidentMap), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[400px] w-full items-center justify-center rounded-lg bg-gray-900 border border-border">
+      <p className="text-gray-400">Laster kart...</p>
+    </div>
+  ),
+})
 
 interface DashboardContentProps {
   userId: string
@@ -50,7 +59,9 @@ export function DashboardContent({
   contractArea,
   contractAreaId,
 }: DashboardContentProps) {
-  const [activeForm, setActiveForm] = useState<ActiveForm>(null)
+  const [activeForm, setActiveForm] = useState<
+    null | "friksjon" | "maskin" | "vinter" | "innkjop" | "utbedring" | "arbeidsdok"
+  >(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [manualName, setManualName] = useState<string | null>(null)
   const [needsName, setNeedsName] = useState(false)
@@ -96,6 +107,28 @@ export function DashboardContent({
     fetchContractType()
   }, [contractNummer])
 
+  const [incidents, setIncidents] = useState<any[]>([])
+  const [selectedContract, setSelectedContract] = useState<string>("")
+
+  useEffect(() => {
+    const fetchIncidents = async () => {
+      try {
+        const contractParam = selectedContract ? `?contract=${selectedContract}` : ""
+        const res = await fetch(`/api/incidents/map${contractParam}`, { cache: "no-store" })
+        const data = await res.json()
+        setIncidents(data || [])
+      } catch (error) {
+        console.error("Failed to fetch incidents:", error)
+      }
+    }
+
+    fetchIncidents()
+    const interval = setInterval(fetchIncidents, 60000) // Refresh every minute
+    return () => clearInterval(interval)
+  }, [selectedContract])
+
+  const lastIncident = incidents[0] || null
+
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -105,9 +138,9 @@ export function DashboardContent({
   const handleFormClick = (formId: string) => {
     if (!effectiveName) {
       setNeedsName(true)
-      setActiveForm(formId as ActiveForm)
+      setActiveForm(formId as any)
     } else {
-      setActiveForm(formId as ActiveForm)
+      setActiveForm(formId as any)
     }
   }
 
@@ -329,8 +362,81 @@ export function DashboardContent({
           <div className="max-w-xl mx-auto">{renderForm()}</div>
         ) : (
           <WeatherProvider contractId={contractAreaId || "default"}>
-            {/* Registration Section */}
-            <section className="mb-6 sm:mb-8">
+            {/* Incident map section - desktop only */}
+            <section className="hidden lg:grid lg:grid-cols-3 gap-6 mb-6">
+              {/* Main content area */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Registration Section */}
+                <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+                    <h2 className="text-lg sm:text-xl font-semibold text-white">Registreringer</h2>
+                    <div className="flex items-center gap-2">
+                      <ExportRegistrationsButton
+                        userType={userType}
+                        isContractAdmin={isContractAdmin}
+                        contractNummer={contractNummer}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push("/qr")}
+                        className="border-border text-white hover:bg-secondary bg-transparent touch-manipulation"
+                      >
+                        <QrCode className="h-4 w-4" />
+                      </Button>
+                      {isMestaUser && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push("/admin")}
+                          className="border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white bg-transparent"
+                        >
+                          Admin
+                        </Button>
+                      )}
+                      {isContractAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push("/admin/weather-locations")}
+                          className="border-border text-white hover:bg-secondary bg-transparent touch-manipulation"
+                        >
+                          <MapPin className="h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Værlokasjoner</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    {registrationCards.map((card) => (
+                      <RegistrationCard key={card.id} {...card} onClick={() => handleFormClick(card.id)} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Incident map sidebar - desktop only */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-white">Hendelseskart</h3>
+                  <select
+                    className="text-xs border border-border rounded px-2 py-1 bg-mesta-navy text-white"
+                    value={selectedContract}
+                    onChange={(e) => setSelectedContract(e.target.value)}
+                  >
+                    <option value="">Alle kontrakter</option>
+                    <option value="DK9504">DK9504</option>
+                    <option value="DK9507">DK9507</option>
+                  </select>
+                </div>
+                <LastIncidentBanner incident={lastIncident} /> {/* Use LastIncidentBanner */}
+                <IncidentMapDynamic incidents={incidents} contractArea={selectedContract} />
+                <p className="text-xs text-gray-400 text-center">Viser hendelser siste 24 timer</p>
+              </div>
+            </section>
+
+            {/* Mobile/Tablet Registration Section */}
+            <section className="lg:hidden mb-6 sm:mb-8">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <h2 className="text-lg sm:text-xl font-semibold text-white">Registreringer</h2>
                 <div className="flex items-center gap-2">
@@ -370,7 +476,7 @@ export function DashboardContent({
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {registrationCards.map((card) => (
                   <RegistrationCard key={card.id} {...card} onClick={() => handleFormClick(card.id)} />
                 ))}

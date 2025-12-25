@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { calculateOperationalStatus } from "@/lib/operational-status"
+import { classifyIncident } from "@/lib/incidents/classify"
 import { REGISTRATION_TYPES } from "@/lib/types"
 
 export async function POST(req: NextRequest) {
@@ -39,6 +40,8 @@ export async function POST(req: NextRequest) {
       vakttlf: metadata.vakttlf,
     })
 
+    const incidentCategory = classifyIncident(transcript)
+
     const supabase = await createClient()
 
     const row = {
@@ -46,13 +49,17 @@ export async function POST(req: NextRequest) {
       registration_type: REGISTRATION_TYPES.VOICE_MEMO,
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
+      lat: metadata.lat,
+      lon: metadata.lon,
+      vegreferanse: metadata.vegreferanse,
+      incident_category: incidentCategory,
       data: {
         type: metadata.type,
         vakttlf: metadata.vakttlf,
         ringer: metadata.ringer,
         hendelse: metadata.hendelse,
         tiltak: metadata.tiltak,
-        transcript, // Guaranteed to have content
+        transcript,
         timestamp: metadata.timestamp,
         operationalStatus: status,
       },
@@ -69,6 +76,7 @@ export async function POST(req: NextRequest) {
       success: true,
       transcript,
       status,
+      incidentCategory,
       message: "Voice memo successfully saved with transcription",
     })
   } catch (error) {
