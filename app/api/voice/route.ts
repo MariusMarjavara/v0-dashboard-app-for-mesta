@@ -8,13 +8,29 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const audio = formData.get("audio") as File
     const metadataStr = formData.get("metadata") as string
+
+    if (!metadataStr) {
+      return NextResponse.json({ error: "No metadata provided" }, { status: 400 })
+    }
+
     const metadata = JSON.parse(metadataStr)
+
+    if (
+      !metadata.transcript ||
+      metadata.transcript.trim() === "" ||
+      metadata.transcript === "[Transkribering feilet]"
+    ) {
+      return NextResponse.json(
+        { error: "Transcript is required. Voice memo cannot be saved without transcription." },
+        { status: 400 },
+      )
+    }
 
     if (!audio) {
       return NextResponse.json({ error: "No audio file" }, { status: 400 })
     }
 
-    const transcript = metadata.transcript || "[Transkribering ikke tilgjengelig]"
+    const transcript = metadata.transcript
 
     const status = calculateOperationalStatus({
       transcript,
@@ -24,6 +40,7 @@ export async function POST(req: NextRequest) {
     })
 
     const supabase = await createClient()
+
     const row = {
       user_id: metadata.userId,
       registration_type: REGISTRATION_TYPES.VOICE_MEMO,
@@ -35,7 +52,7 @@ export async function POST(req: NextRequest) {
         ringer: metadata.ringer,
         hendelse: metadata.hendelse,
         tiltak: metadata.tiltak,
-        transcript,
+        transcript, // Guaranteed to have content
         timestamp: metadata.timestamp,
         operationalStatus: status,
       },
@@ -52,6 +69,7 @@ export async function POST(req: NextRequest) {
       success: true,
       transcript,
       status,
+      message: "Voice memo successfully saved with transcription",
     })
   } catch (error) {
     console.error("Voice memo error:", error)

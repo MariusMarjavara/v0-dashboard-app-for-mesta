@@ -133,10 +133,9 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   }
 
   async function transcribeAudio(blob: Blob): Promise<string> {
-    setTranscribing(true)
     try {
       const formData = new FormData()
-      formData.append("audio", blob, "voice-memo.webm")
+      formData.append("file", blob, "voice-memo.webm")
 
       const response = await fetch("/api/voice/transcribe", {
         method: "POST",
@@ -144,20 +143,14 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
       })
 
       if (!response.ok) {
-        throw new Error("Transcription failed")
+        return "[Transkribering feilet]"
       }
 
       const data = await response.json()
-      const transcriptText = data.text || ""
-      setTranscription(transcriptText)
-
-      return transcriptText
+      return data.text || "[Transkribering feilet]"
     } catch (error) {
       console.error("Transcription error:", error)
-      toast.error("Kunne ikke transkribere opptak")
-      return ""
-    } finally {
-      setTranscribing(false)
+      return "[Transkribering feilet]"
     }
   }
 
@@ -185,27 +178,51 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   }
 
   async function handleSubmit() {
-    if (!audioBlob) return
+    if (!audioBlob || !type) return
 
     setUploading(true)
 
-    const metadata: VoiceMemoMetadata = {
-      type: type!,
-      userId,
-      contractArea,
-      contractNummer,
-      timestamp: new Date().toISOString(),
-      transcript: transcription,
-      ...(type === "loggbok" && {
-        vakttlf,
-        ringer,
-        hendelse,
-        tiltak,
-      }),
-    }
-
     try {
-      const result = await uploadVoiceMemo(audioBlob, metadata)
+      // 1️⃣ ALWAYS transcribe first - this is now blocking and required
+      let transcript = transcription
+      if (!transcript) {
+        setTranscribing(true)
+        transcript = await transcribeAudio(audioBlob)
+        setTranscription(transcript)
+        setTranscribing(false)
+      }
+
+      // 2️⃣ Build metadata with GUARANTEED transcript
+      const metadata: VoiceMemoMetadata = {
+        type,
+        userId,
+        contractArea,
+        contractNummer,
+        timestamp: new Date().toISOString(),
+        transcript, // This is now always populated
+        ...(type === "loggbok" && {
+          vakttlf,
+          ringer,
+          hendelse,
+          tiltak,
+        }),
+      }
+
+      // 3️⃣ Submit ONLY after transcript exists
+      const formData = new FormData()
+      formData.append("audio", audioBlob, "voice-memo.webm")
+      formData.append("metadata", JSON.stringify(metadata))
+
+      const response = await fetch("/api/voice", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) throw new Error("Upload feilet")
+
+      const result = await response.json()
+
+      // Store operational status from backend
       if (result.status) {
         localStorage.setItem(
           "operationalStatus",
@@ -215,28 +232,55 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
           }),
         )
       }
+
       toast.success("Voice memo lagret!")
       resetForm()
     } catch (error) {
-      const base64Audio = await blobToBase64(audioBlob)
-      const offlineItems: OfflineVoiceMemo[] = JSON.parse(localStorage.getItem("offlineVoiceMemos") || "[]")
-      offlineItems.push({
-        audioBlob: base64Audio,
-        metadata,
-        savedAt: Date.now(),
-      })
-      localStorage.setItem("offlineVoiceMemos", JSON.stringify(offlineItems))
-      toast.warning("Ingen internett. Lagret for senere synkronisering.")
-      resetForm()
+      // Offline fallback - still saves with transcript
+      try {
+        const base64Audio = await blobToBase64(audioBlob)
+        const offlineItems: OfflineVoiceMemo[] = JSON.parse(localStorage.getItem("offlineVoiceMemos") || "[]")
+
+        const metadata: VoiceMemoMetadata = {
+          type: type!,
+          userId,
+          contractArea,
+          contractNummer,
+          timestamp: new Date().toISOString(),
+          transcript: transcription || "[Offline - ingen transkripsjon]",
+          ...(type === "loggbok" && {
+            vakttlf,
+            ringer,
+            hendelse,
+            tiltak,
+          }),
+        }
+
+        offlineItems.push({
+          audioBlob: base64Audio,
+          metadata,
+          savedAt: Date.now(),
+        })
+        localStorage.setItem("offlineVoiceMemos", JSON.stringify(offlineItems))
+        toast.warning("Ingen internett. Lagret for senere synkronisering.")
+        resetForm()
+      } catch (offlineError) {
+        toast.error("Kunne ikke lagre voice memo")
+      }
     } finally {
       setUploading(false)
     }
   }
 
   useEffect(() => {
-    if (audioBlob && open && type) {
+    if (audioBlob && open && type && !transcription && !transcribing) {
       ;(async () => {
+        setTranscribing(true)
         const transcript = await transcribeAudio(audioBlob)
+        setTranscription(transcript)
+        setTranscribing(false)
+
+        // Auto-suggest only after transcription completes
         if (transcript && type === "loggbok") {
           autoSuggestFromTranscript(transcript)
         }
