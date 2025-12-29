@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("registrations")
-      .select("id, data, vegreferanse, incident_category, created_at, contract_area, registration_type")
+      .select("id, lat, lon, vegreferanse, incident_category, created_at, contract_area")
       .eq("registration_type", "voice_memo")
       .not("incident_category", "is", null)
       .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
@@ -25,32 +25,56 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
-      return NextResponse.json([], { status: 200 })
+      return NextResponse.json({ incidents: [], rejected: [] }, { status: 200 })
     }
 
-    // Extract GPS from JSONB data and filter out entries without coordinates
-    const incidents =
-      data
-        ?.map((row) => {
-          const lat = row.data?.lat || row.data?.latitude
-          const lon = row.data?.lon || row.data?.longitude
+    const incidents: any[] = []
+    const rejected: any[] = []
 
-          if (!lat || !lon) return null
+    for (const row of data || []) {
+      const rawLat = row.lat
+      const rawLon = row.lon
 
-          return {
-            id: row.id,
-            lat: Number(lat),
-            lon: Number(lon),
-            vegreferanse: row.vegreferanse || "Ukjent lokasjon",
-            category: row.incident_category || "Annet",
-            reportedAt: row.created_at,
-            ageMinutes: Math.floor((Date.now() - new Date(row.created_at).getTime()) / 60000),
-          }
+      const lat = Number(typeof rawLat === "string" ? rawLat.replace(",", ".") : rawLat)
+      const lon = Number(typeof rawLon === "string" ? rawLon.replace(",", ".") : rawLon)
+
+      if (!isFinite(lat) || !isFinite(lon)) {
+        rejected.push({
+          id: row.id,
+          reason: "Invalid coordinates (not finite)",
+          rawLat,
+          rawLon,
+          created_at: row.created_at,
         })
-        .filter((incident) => incident !== null) || []
+        continue
+      }
 
-    return NextResponse.json(incidents)
+      if (lat < 57.9 || lat > 71.5 || lon < 4.5 || lon > 31.5) {
+        rejected.push({
+          id: row.id,
+          reason: "Outside Norway bounds",
+          rawLat,
+          rawLon,
+          lat,
+          lon,
+          created_at: row.created_at,
+        })
+        continue
+      }
+
+      incidents.push({
+        id: row.id,
+        lat,
+        lon,
+        vegreferanse: row.vegreferanse || "Ukjent lokasjon",
+        category: row.incident_category || "Annet",
+        reportedAt: row.created_at,
+        ageMinutes: Math.round((Date.now() - new Date(row.created_at).getTime()) / 60000),
+      })
+    }
+
+    return NextResponse.json({ incidents, rejected })
   } catch (error) {
-    return NextResponse.json([], { status: 200 })
+    return NextResponse.json({ incidents: [], rejected: [] }, { status: 200 })
   }
 }

@@ -192,7 +192,6 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
         setTranscribing(false)
       }
 
-      // 2️⃣ Build metadata with GUARANTEED transcript
       const metadata: VoiceMemoMetadata = {
         type,
         userId,
@@ -207,34 +206,6 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
           tiltak,
         }),
       }
-
-      // 3️⃣ Submit ONLY after transcript exists
-      const formData = new FormData()
-      formData.append("audio", audioBlob, "voice-memo.webm")
-      formData.append("metadata", JSON.stringify(metadata))
-
-      const response = await fetch("/api/voice", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) throw new Error("Upload feilet")
-
-      const result = await response.json()
-
-      // Store operational status from backend
-      if (result.status) {
-        localStorage.setItem(
-          "operationalStatus",
-          JSON.stringify({
-            status: result.status,
-            timestamp: Date.now(),
-          }),
-        )
-      }
-
-      toast.success("Voice memo lagret!")
-      resetForm()
     } catch (error) {
       // Offline fallback - still saves with transcript
       try {

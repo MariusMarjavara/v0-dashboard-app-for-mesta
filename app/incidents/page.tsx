@@ -1,4 +1,3 @@
-import { IncidentMap } from "@/components/incident-map"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -15,13 +14,9 @@ export default function IncidentsPage() {
         <CardHeader>
           <CardTitle className="text-2xl text-white">Hendelseskart</CardTitle>
           <CardDescription className="text-gray-400">
-            Automatisk registrerte hendelser fra talenotater siste 24 timer. Hendelser blekner ut etter hvert som tiden
-            går.
+            Hendelseskart-funksjonen er midlertidig deaktivert. Talenotater fortsetter å fungere normalt.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <IncidentMap />
-        </CardContent>
       </Card>
 
       <Card className="bg-gray-900 border-gray-800">
