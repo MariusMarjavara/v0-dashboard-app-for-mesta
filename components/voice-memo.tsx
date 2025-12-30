@@ -157,24 +157,34 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   function autoSuggestFromTranscript(text: string) {
     const lowerText = text.toLowerCase()
 
-    if (lowerText.includes("vakttlf") || lowerText.includes("vakttelefon")) {
+    // Only set vakttlf if it's false (never overwrite explicit "Nei")
+    if (vakttlf === false && (lowerText.includes("vakttlf") || lowerText.includes("vakttelefon"))) {
       setVakttlf(true)
     }
 
-    if (lowerText.includes("trafikant")) setRinger("Trafikant")
-    else if (lowerText.includes("politi")) setRinger("Politiet")
-    else if (lowerText.includes("vegtrafikksentral") || lowerText.includes("vts")) setRinger("Vegtrafikksentral")
-    else if (lowerText.includes("amk") || lowerText.includes("brann")) setRinger("AMK/Brann")
+    // Only set ringer if it's empty (never overwrite user selection)
+    if (!ringer) {
+      if (lowerText.includes("trafikant")) setRinger("Trafikant")
+      else if (lowerText.includes("politi")) setRinger("Politiet")
+      else if (lowerText.includes("vegtrafikksentral") || lowerText.includes("vts")) setRinger("Vegtrafikksentral")
+      else if (lowerText.includes("amk") || lowerText.includes("brann")) setRinger("AMK/Brann")
+    }
 
-    if (lowerText.includes("glatt") || lowerText.includes("is")) setHendelse("Glatt vei")
-    else if (lowerText.includes("stengt") || lowerText.includes("steng")) setHendelse("Stengt vei")
-    else if (lowerText.includes("ulykke") || lowerText.includes("krasj")) setHendelse("Ulykke")
-    else if (lowerText.includes("sikt") || lowerText.includes("tåke")) setHendelse("Dårlig sikt")
+    // Only set hendelse if it's empty (never overwrite user selection)
+    if (!hendelse) {
+      if (lowerText.includes("glatt") || lowerText.includes("is")) setHendelse("Glatt vei")
+      else if (lowerText.includes("stengt") || lowerText.includes("steng")) setHendelse("Stengt vei")
+      else if (lowerText.includes("ulykke") || lowerText.includes("krasj")) setHendelse("Ulykke")
+      else if (lowerText.includes("sikt") || lowerText.includes("tåke")) setHendelse("Dårlig sikt")
+    }
 
-    if (lowerText.includes("brøyt") || lowerText.includes("brøt")) setTiltak("Brøyting")
-    else if (lowerText.includes("strø")) setTiltak("Strøing")
-    else if (lowerText.includes("befar")) setTiltak("Befaring")
-    else if (lowerText.includes("eskaler")) setTiltak("Eskalert")
+    // Only set tiltak if it's empty (never overwrite user selection)
+    if (!tiltak) {
+      if (lowerText.includes("brøyt") || lowerText.includes("brøt")) setTiltak("Brøyting")
+      else if (lowerText.includes("strø")) setTiltak("Strøing")
+      else if (lowerText.includes("befar")) setTiltak("Befaring")
+      else if (lowerText.includes("eskaler")) setTiltak("Eskalert")
+    }
   }
 
   async function handleSubmit() {
@@ -328,6 +338,8 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
             </div>
           ) : type === "loggbok" ? (
             <div className="space-y-4">
+              <p className="text-xs text-gray-400">Steg: {vakttlf ? "Detaljer" : "Avklaring"}</p>
+
               <div>
                 <label className="text-sm text-gray-300 font-medium">Gjelder dette vakttlf?</label>
                 <div className="flex gap-2 mt-2">
@@ -400,10 +412,32 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
                 </select>
               </div>
 
+              <div className="rounded bg-[#101826] border border-gray-600 p-3 text-sm">
+                <p className="text-gray-400 mb-2">Registrert:</p>
+                <ul className="space-y-1">
+                  <li>
+                    Vakttlf: <strong>{vakttlf ? "Ja" : "Nei"}</strong>
+                  </li>
+                  {vakttlf && (
+                    <li>
+                      Ringer: <strong>{ringer || "–"}</strong>
+                    </li>
+                  )}
+                  {vakttlf && (
+                    <li>
+                      Hendelse: <strong>{hendelse || "–"}</strong>
+                    </li>
+                  )}
+                  <li>
+                    Tiltak: <strong>{tiltak || "–"}</strong>
+                  </li>
+                </ul>
+              </div>
+
               <Button
                 onClick={handleSubmit}
-                disabled={uploading}
-                className="w-full h-14 text-base bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform"
+                disabled={uploading || (vakttlf && (!ringer || !hendelse || !tiltak))}
+                className="w-full h-14 text-base bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
                   <>
