@@ -25,38 +25,7 @@ export async function GET(request: Request) {
 
   let query = supabase.from("registrations").select("*").order("created_at", { ascending: false })
 
-  if (exportType === "user") {
-    // Bruker eksporterer kun sine egne registreringer
-    query = query.eq("user_id", user.id)
-  } else if (exportType === "admin" && contractNummer) {
-    // Sjekk om bruker er admin for denne kontrakten
-    const { data: isAdmin } = await supabase
-      .from("contract_admins")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("contract_nummer", Number.parseInt(contractNummer))
-      .single()
-
-    if (!isAdmin && profile?.user_type !== "mesta") {
-      return new NextResponse("Unauthorized - Not a contract admin", { status: 403 })
-    }
-
-    // Hent alle registreringer fra brukere i denne kontrakten
-    const { data: contractUsers } = await supabase.from("profiles").select("id").eq("contract_area", contractNummer)
-
-    if (contractUsers && contractUsers.length > 0) {
-      const userIds = contractUsers.map((u) => u.id)
-      query = query.in("user_id", userIds)
-    }
-  } else if (exportType === "all") {
-    // Kun Mesta-brukere kan eksportere alt
-    if (profile?.user_type !== "mesta") {
-      return new NextResponse("Unauthorized - Mesta only", { status: 403 })
-    }
-    // Ingen filter - henter alt
-  } else {
-    return new NextResponse("Invalid export type", { status: 400 })
-  }
+  query = query.eq("user_id", user.id)
 
   const { data: registrations, error } = await query
 
@@ -71,7 +40,7 @@ export async function GET(request: Request) {
     maskinregistrering: [] as any[],
     friksjon: [] as any[],
     innkjop: [] as any[],
-    voice_memo: [] as any[], // Adding voice_memo export support
+    voice_memo: [] as any[],
   }
 
   registrations?.forEach((reg) => {
@@ -199,28 +168,7 @@ export async function GET(request: Request) {
     compression: true,
   })
 
-  const filename = `registreringer_${exportType}_${new Date().toISOString().split("T")[0]}.xlsx`
-
-  if (saveToSupabase) {
-    const filePath = `exports/${exportType}/${contractNummer || "all"}/${filename}`
-
-    const { error: uploadError } = await supabase.storage.from("registrations").upload(filePath, excelBuffer, {
-      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      upsert: false,
-    })
-
-    if (uploadError) {
-    } else {
-      // Logg eksporten
-      await supabase.from("export_logs").insert({
-        user_id: user.id,
-        export_type: exportType,
-        contract_nummer: contractNummer ? Number.parseInt(contractNummer) : null,
-        file_path: filePath,
-        record_count: registrations?.length || 0,
-      })
-    }
-  }
+  const filename = `mine_registreringer_${new Date().toISOString().split("T")[0]}.xlsx`
 
   return new NextResponse(excelBuffer, {
     headers: {

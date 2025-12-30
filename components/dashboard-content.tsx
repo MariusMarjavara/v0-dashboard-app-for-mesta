@@ -32,18 +32,22 @@ import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
 
 interface DashboardContentProps {
-  user: {
-    id: string
-    name: string
-    type: "mesta" | "ue"
-    email: string
-    role: string
-  }
+  userId: string
+  userName: string
+  userType: "mesta" | "ue"
+  userEmail: string
   contractArea: string
-  contractNummer: number | null
+  contractAreaId: string
 }
 
-export function DashboardContent({ user, contractArea, contractNummer }: DashboardContentProps) {
+export function DashboardContent({
+  userId,
+  userName,
+  userType,
+  userEmail,
+  contractArea,
+  contractAreaId,
+}: DashboardContentProps) {
   const [activeForm, setActiveForm] = useState<
     null | "friksjon" | "maskin" | "vinter" | "innkjop" | "utbedring" | "arbeidsdok"
   >(null)
@@ -54,8 +58,30 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
   const [contractType, setContractType] = useState<"riksveg" | "fylkeskommune" | "felleskontrakt" | null>(null)
   const router = useRouter()
 
-  const effectiveName = user.name || manualName || ""
-  const isMestaUser = user.type === "mesta"
+  const user = {
+    id: userId,
+    name: userName,
+    type: userType,
+    email: userEmail,
+  }
+
+  const contractNummer = contractAreaId ? Number.parseInt(contractAreaId) : null
+
+  const [voiceFlowActive, setVoiceFlowActive] = useState(false)
+  const [voiceTranscript, setVoiceTranscript] = useState("")
+  const [voiceAudioBlob, setVoiceAudioBlob] = useState<Blob | null>(null)
+  const [voiceConfirmData, setVoiceConfirmData] = useState<Record<string, string> | null>(null)
+  const [activeNavSection, setActiveNavSection] = useState<"status" | "voice" | "camera" | "log">("status")
+  const { carMode } = useCarMode()
+
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
+    checkDesktop()
+    window.addEventListener("resize", checkDesktop)
+    return () => window.removeEventListener("resize", checkDesktop)
+  }, [])
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -97,7 +123,7 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
   }
 
   const handleFormClick = (formId: string) => {
-    if (!effectiveName) {
+    if (!userName) {
       setNeedsName(true)
       setActiveForm(formId as any)
     } else {
@@ -130,7 +156,7 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
     }
 
     const formProps = {
-      userName: effectiveName,
+      userName: userName,
       userId: user.id,
       contractArea,
       contractNummer,
@@ -156,24 +182,8 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
     }
   }
 
-  const registrationCards = getRegistrationCardsForUser(user.type)
-  const filteredApps = getAppsForUser(user.type, contractType || undefined)
-
-  const [voiceFlowActive, setVoiceFlowActive] = useState(false)
-  const [voiceTranscript, setVoiceTranscript] = useState("")
-  const [voiceAudioBlob, setVoiceAudioBlob] = useState<Blob | null>(null)
-  const [voiceConfirmData, setVoiceConfirmData] = useState<Record<string, string> | null>(null)
-  const [activeNavSection, setActiveNavSection] = useState<"status" | "voice" | "camera" | "log">("status")
-  const { carMode } = useCarMode()
-
-  const [isDesktop, setIsDesktop] = useState(false)
-
-  useEffect(() => {
-    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
-    checkDesktop()
-    window.addEventListener("resize", checkDesktop)
-    return () => window.removeEventListener("resize", checkDesktop)
-  }, [])
+  const registrationCards = getRegistrationCardsForUser(userType)
+  const filteredApps = getAppsForUser(userType, contractType || undefined)
 
   const handleVoiceFinished = async (blob: Blob) => {
     setVoiceAudioBlob(blob)
@@ -266,6 +276,9 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
     return parts.join("\n")
   }
 
+  const effectiveName = userName || manualName || ""
+  const isMestaUser = userType === "mesta"
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1f3a] via-[#1a2332] to-[#0b1f3a] text-white">
       {/* Header */}
@@ -277,7 +290,7 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
               <div className="hidden md:flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <User className="h-4 w-4" />
-                  <span>{effectiveName || user.email}</span>
+                  <span>{effectiveName || userEmail}</span>
                 </div>
                 {contractArea && (
                   <div className="flex items-center gap-1.5 px-2 py-1 bg-mesta-navy rounded-lg border border-border">
@@ -312,7 +325,7 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
             )}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-3.5 w-3.5" />
-              <span className="truncate">{effectiveName || user.email}</span>
+              <span className="truncate">{effectiveName || userEmail}</span>
               {isMestaUser && (
                 <span className="px-2 py-0.5 bg-mesta-orange/20 text-mesta-orange text-xs rounded-full font-medium">
                   Mesta
@@ -337,11 +350,7 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <h2 className="text-lg sm:text-xl font-semibold text-white">Registreringer</h2>
                 <div className="flex items-center gap-2">
-                  <ExportRegistrationsButton
-                    userType={user.type}
-                    isContractAdmin={isContractAdmin}
-                    contractNummer={contractNummer}
-                  />
+                  <ExportRegistrationsButton />
                   <Button
                     variant="outline"
                     size="sm"
@@ -350,27 +359,6 @@ export function DashboardContent({ user, contractArea, contractNummer }: Dashboa
                   >
                     <QrCode className="h-4 w-4" />
                   </Button>
-                  {isMestaUser && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push("/admin")}
-                      className="border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white bg-transparent"
-                    >
-                      Admin
-                    </Button>
-                  )}
-                  {isContractAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push("/admin/weather-locations")}
-                      className="border-border text-white hover:bg-secondary bg-transparent touch-manipulation"
-                    >
-                      <MapPin className="h-4 w-4 sm:mr-2" />
-                      <span className="hidden sm:inline">Værlokasjoner</span>
-                    </Button>
-                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">

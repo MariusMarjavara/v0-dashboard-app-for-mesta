@@ -33,17 +33,17 @@ export const REGISTRATION_CARDS: RegistrationCardConfig[] = [
     title: "Innkjøp",
     description: "Registrer innkjøp og utgifter",
     icon: "innkjop",
-    userTypes: ["mesta"],
+    userTypes: ["mesta", "ue"],
   },
   {
     id: "maskin",
     title: "Maskinoppfølgning",
     description: "Innleid maskin - vedlikehold og forbruksvarer",
     icon: "maskin",
-    userTypes: ["mesta"],
+    userTypes: ["mesta", "ue"],
   },
 ]
 
 export function getRegistrationCardsForUser(userType: "mesta" | "ue"): RegistrationCardConfig[] {
-  return REGISTRATION_CARDS.filter((card) => card.userTypes.includes(userType))
+  return REGISTRATION_CARDS // All registration cards now available to all users - no role filtering
 }
