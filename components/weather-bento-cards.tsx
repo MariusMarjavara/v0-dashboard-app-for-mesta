@@ -77,19 +77,42 @@ function getRoadCondition(temp: number, precip: number, wind: number): "good" | 
   return "good"
 }
 
+function getYrLink(lat: number, lon: number): string {
+  return `https://www.yr.no/nb/v%C3%A6rvarsel/daglig-tabell/${lat},${lon}`
+}
+
 const WeatherBentoCard = memo(function WeatherBentoCard({
   weather,
   isHighlighted = false,
 }: { weather: WeatherData; isHighlighted?: boolean }) {
+  const handleClick = () => {
+    window.open(getYrLink(weather.lat, weather.lon), "_blank", "noopener,noreferrer")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
   return (
     <Card
-      className={`p-4 transition-all ${
+      className={`p-4 transition-all cursor-pointer hover:shadow-lg hover:scale-[1.02] ${
         isHighlighted ? "border-2 border-mesta-orange bg-card" : "border-border bg-card"
       }`}
+      role="link"
+      aria-label={`Åpne værvarsel for ${weather.location} på yr.no`}
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
     >
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h3 className="text-xl font-bold text-card-foreground">{weather.location}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold text-card-foreground">{weather.location}</h3>
+            <span className="text-xs text-muted-foreground">yr.no →</span>
+          </div>
           <Badge
             variant="outline"
             className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground"
@@ -170,11 +193,32 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
 })
 
 const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weather: WeatherData }) {
+  const handleClick = () => {
+    window.open(getYrLink(weather.lat, weather.lon), "_blank", "noopener,noreferrer")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
   return (
-    <Card className="border-border bg-card p-4">
+    <Card
+      className="border-border bg-card p-4 cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all"
+      role="link"
+      aria-label={`Åpne værvarsel for ${weather.location} på yr.no`}
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+    >
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h3 className="text-lg font-bold text-card-foreground">{weather.location}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-card-foreground">{weather.location}</h3>
+            <span className="text-xs text-muted-foreground">yr.no →</span>
+          </div>
           <Badge
             variant="outline"
             className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground"
