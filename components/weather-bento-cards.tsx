@@ -107,41 +107,29 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="mb-3 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-xl font-bold text-card-foreground">{weather.location}</h3>
-            <span className="text-xs text-muted-foreground">yr.no →</span>
-          </div>
-          <Badge
-            variant="outline"
-            className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground"
-          >
-            {weather.typeText}
-          </Badge>
+      <div className="mb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xl font-bold leading-tight tracking-tight text-card-foreground">{weather.location}</h3>
+          <span className="text-xs text-muted-foreground">Detaljert varsel på yr.no →</span>
         </div>
-        <Badge className={`${weather.conditionColor} border text-xs font-semibold`} variant="outline">
-          {weather.conditionText}
+        <Badge variant="outline" className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
+          {weather.typeText}
         </Badge>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Thermometer className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-muted-foreground">Temperatur</span>
-          </div>
-          <span className={`text-lg font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-card-foreground"}`}>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <Thermometer className="mx-auto h-4 w-4 text-blue-400" />
+          <div className="text-xs text-muted-foreground">Temp</div>
+          <div className={`text-lg font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-card-foreground"}`}>
             {weather.temperature}°C
-          </span>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wind className="h-4 w-4 text-mesta-orange" />
-            <span className="text-sm text-muted-foreground">Vind</span>
-          </div>
-          <span
+        <div>
+          <Wind className="mx-auto h-4 w-4 text-mesta-orange" />
+          <div className="text-xs text-muted-foreground">Vind</div>
+          <div
             className={`text-lg font-bold ${
               weather.windSpeed > 15
                 ? "text-mesta-orange"
@@ -151,42 +139,42 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
             }`}
           >
             {weather.windSpeed} m/s
-          </span>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Droplets className="h-4 w-4 text-blue-300" />
-            <span className="text-sm text-muted-foreground">Nedbør</span>
-          </div>
-          <span className={`text-lg font-bold ${weather.precipitation > 2 ? "text-blue-400" : "text-card-foreground"}`}>
+        <div>
+          <Droplets className="mx-auto h-4 w-4 text-blue-300" />
+          <div className="text-xs text-muted-foreground">Nedbør</div>
+          <div className={`text-lg font-bold ${weather.precipitation > 2 ? "text-blue-400" : "text-card-foreground"}`}>
             {weather.precipitation} mm
-          </span>
+          </div>
         </div>
       </div>
 
-      <div
-        className={`mt-4 rounded-lg p-3 text-center ${
-          weather.exposureScore >= 70
-            ? "bg-red-500/20"
-            : weather.exposureScore >= 40
-              ? "bg-mesta-orange/20"
-              : "bg-green-500/20"
-        }`}
-      >
-        <div className="text-sm text-muted-foreground">Eksponering</div>
+      <div className="mt-4 border-t border-border pt-3">
         <div
-          className={`text-4xl font-bold ${
-            weather.exposureScore >= 70
+          className={`text-center text-sm font-medium ${
+            weather.condition === "danger"
               ? "text-red-500"
-              : weather.exposureScore >= 40
-                ? "text-mesta-orange"
+              : weather.condition === "caution"
+                ? "text-yellow-500"
                 : "text-green-500"
           }`}
         >
-          {weather.exposureScore}
+          {weather.conditionText} - {weather.exposureScore}
         </div>
-        <div className="text-xs text-muted-foreground">poeng</div>
+        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full ${
+              weather.condition === "danger"
+                ? "bg-red-500"
+                : weather.condition === "caution"
+                  ? "bg-yellow-500"
+                  : "bg-green-500"
+            }`}
+            style={{ width: `${weather.exposureScore}%` }}
+          />
+        </div>
       </div>
     </Card>
   )
@@ -213,21 +201,13 @@ const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weath
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="mb-3 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-card-foreground">{weather.location}</h3>
-            <span className="text-xs text-muted-foreground">yr.no →</span>
-          </div>
-          <Badge
-            variant="outline"
-            className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground"
-          >
-            {weather.typeText}
-          </Badge>
+      <div className="mb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-bold leading-tight tracking-tight text-card-foreground">{weather.location}</h3>
+          <span className="text-xs text-muted-foreground">yr.no →</span>
         </div>
-        <Badge className={`${weather.conditionColor} border text-xs font-semibold`} variant="outline">
-          {weather.conditionText}
+        <Badge variant="outline" className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
+          {weather.typeText}
         </Badge>
       </div>
 
@@ -263,26 +243,29 @@ const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weath
         </div>
       </div>
 
-      <div
-        className={`mt-3 rounded-lg p-2 text-center ${
-          weather.exposureScore >= 70
-            ? "bg-red-500/10"
-            : weather.exposureScore >= 40
-              ? "bg-mesta-orange/10"
-              : "bg-green-500/10"
-        }`}
-      >
-        <div className="text-xs text-muted-foreground">Eksponeringsscore</div>
+      <div className="mt-3 border-t border-border pt-2">
         <div
-          className={`text-2xl font-bold ${
-            weather.exposureScore >= 70
+          className={`text-center text-sm font-medium ${
+            weather.condition === "danger"
               ? "text-red-500"
-              : weather.exposureScore >= 40
-                ? "text-mesta-orange"
+              : weather.condition === "caution"
+                ? "text-yellow-500"
                 : "text-green-500"
           }`}
         >
-          {weather.exposureScore}
+          {weather.conditionText} - {weather.exposureScore}
+        </div>
+        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full ${
+              weather.condition === "danger"
+                ? "bg-red-500"
+                : weather.condition === "caution"
+                  ? "bg-yellow-500"
+                  : "bg-green-500"
+            }`}
+            style={{ width: `${weather.exposureScore}%` }}
+          />
         </div>
       </div>
     </Card>
