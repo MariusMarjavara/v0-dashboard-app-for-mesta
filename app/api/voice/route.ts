@@ -4,22 +4,27 @@ import { calculateOperationalStatus } from "@/lib/operational-status"
 import { REGISTRATION_TYPES } from "@/lib/types"
 
 export async function POST(req: NextRequest) {
+  console.log("[v0] 🧠 /api/voice hit")
   try {
     const formData = await req.formData()
     const audio = formData.get("audio") as File
     const metadataStr = formData.get("metadata") as string
+
+    console.log("[v0] 🧠 API received - audio:", !!audio, "metadata:", !!metadataStr)
 
     if (!metadataStr) {
       return NextResponse.json({ error: "No metadata provided" }, { status: 400 })
     }
 
     const metadata = JSON.parse(metadataStr)
+    console.log("[v0] 🧠 Parsed metadata:", metadata)
 
     if (
       !metadata.transcript ||
       metadata.transcript.trim() === "" ||
       metadata.transcript === "[Transkribering feilet]"
     ) {
+      console.error("[v0] ❌ Invalid transcript:", metadata.transcript)
       return NextResponse.json(
         { error: "Transcript is required. Voice memo cannot be saved without transcription." },
         { status: 400 },
@@ -31,6 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const transcript = metadata.transcript
+    console.log("[v0] 🧠 Transcript:", transcript)
 
     const status = calculateOperationalStatus({
       transcript,
@@ -39,10 +45,13 @@ export async function POST(req: NextRequest) {
       vakttlf: metadata.vakttlf,
     })
 
+    console.log("[v0] 🧠 Operational status:", status)
+
     const supabase = await createClient()
 
     const row = {
       user_id: metadata.userId,
+      registered_by_name: metadata.userName, // Added registered_by_name from metadata
       registration_type: REGISTRATION_TYPES.VOICE_MEMO,
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
@@ -58,12 +67,16 @@ export async function POST(req: NextRequest) {
       },
     }
 
+    console.log("[v0] 🧠 Inserting row into database")
+
     const { error: dbError } = await supabase.from("registrations").insert(row)
 
     if (dbError) {
-      console.error("Database error:", dbError)
+      console.error("[v0] ❌ Database error:", dbError)
       throw new Error("Database insert failed")
     }
+
+    console.log("[v0] ✅ Voice memo saved successfully")
 
     return NextResponse.json({
       success: true,
@@ -72,7 +85,7 @@ export async function POST(req: NextRequest) {
       message: "Voice memo successfully saved with transcription",
     })
   } catch (error) {
-    console.error("Voice memo error:", error)
+    console.error("[v0] ❌ Voice memo error:", error)
     return NextResponse.json({ error: "Failed to process voice memo" }, { status: 500 })
   }
 }

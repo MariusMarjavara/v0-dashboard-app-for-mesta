@@ -19,7 +19,7 @@ export const CAR_MODE_RULES = {
   allowDropdowns: false,
   requireVoice: true,
   requireLongPress: true,
-  longPressMs: 600,
+  longPressMs: 300,
   hapticFeedback: true,
 }
 

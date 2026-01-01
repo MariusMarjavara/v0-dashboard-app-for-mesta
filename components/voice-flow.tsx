@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { CheckCircle2, XCircle, Undo2 } from "lucide-react"
+import { CheckCircle2, XCircle, Undo2, Mic } from "lucide-react"
 
 interface Question {
   key: string
@@ -36,6 +36,23 @@ function calculateConfidence(text: string): number {
   return Math.min(1, Math.round(score * 100) / 100)
 }
 
+const isEcho = (spoken: string, prompt: string): boolean => {
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\wæøå]/g, "")
+      .trim()
+
+  const normalizedSpoken = normalize(spoken)
+  const normalizedPrompt = normalize(prompt)
+
+  // Check if spoken text contains significant portion of prompt
+  return normalizedSpoken.includes(normalizedPrompt.substring(0, Math.min(10, normalizedPrompt.length)))
+}
+
+const SpeechRecognition =
+  typeof window !== "undefined" ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition : null
+
 export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) {
   const [step, setStep] = useState(0)
   const [data, setData] = useState<Record<string, string>>({})
@@ -45,6 +62,7 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null)
   const [confidence, setConfidence] = useState<Record<string, number>>({})
   const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null)
+  const [liveTranscript, setLiveTranscript] = useState<string>("")
 
   const current = QUESTIONS[step]
   const isLastStep = step === QUESTIONS.length - 1
@@ -59,28 +77,95 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
   }
 
   useEffect(() => {
-    if (current && !awaitingConfirmation) {
+    if (!current || awaitingConfirmation) return
+
+    setLiveTranscript("")
+
+    if (!SpeechRecognition) {
+      console.log("[v0] 🎙️ SpeechRecognition not available, falling back to buttons")
       speak(current.prompt)
+      return
     }
-  }, [step, current, awaitingConfirmation])
 
-  useEffect(() => {
-    if (awaitingConfirmation) return
+    const recognition = new SpeechRecognition()
+    recognition.lang = "nb-NO"
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
 
-    if (timeoutId) clearTimeout(timeoutId)
+    recognition.onstart = () => {
+      console.log("[v0] 🎙️ Voice recognition started for question:", current.key)
+      setIsListening(true)
+    }
 
-    const id = setTimeout(() => {
-      if (current) {
-        speak(current.prompt)
+    recognition.onresult = (event: any) => {
+      const spoken = event.results[0][0].transcript
+      console.log("[v0] 🎙️ Heard:", spoken)
+
+      if (isEcho(spoken, current.prompt)) {
+        console.log("[v0] 🔇 Ignored echo:", spoken)
+        return
       }
-    }, 8000)
 
-    setTimeoutId(id)
+      setLiveTranscript(spoken)
+
+      // Auto-handle yes/no questions
+      const normalized = spoken.toLowerCase()
+      if (current.type === "yesno") {
+        if (normalized.includes("ja") || normalized.includes("yes")) {
+          console.log("[v0] ✅ Auto-handling YES")
+          handleProposedAnswer("ja")
+          return
+        }
+        if (normalized.includes("nei") || normalized.includes("no")) {
+          console.log("[v0] ❌ Auto-handling NO")
+          handleProposedAnswer("nei")
+          return
+        }
+        console.log("[v0] ⚠️ Unclear yes/no answer, ignoring")
+        return
+      }
+
+      // For text questions, propose the answer
+      if (current.type === "text" && spoken.trim().length > 0) {
+        console.log("[v0] 📝 Proposing text answer:", spoken)
+        handleProposedAnswer(spoken)
+      }
+    }
+
+    recognition.onerror = (e: any) => {
+      console.warn("[v0] 🚨 Speech recognition error:", e.error)
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      console.log("[v0] 🛑 Voice recognition ended")
+      setIsListening(false)
+    }
+
+    const utterance = new SpeechSynthesisUtterance(current.prompt)
+    utterance.lang = "nb-NO"
+    utterance.rate = 0.9
+
+    utterance.onend = () => {
+      console.log("[v0] 🔊 Prompt finished, starting to listen after 300ms buffer")
+      setTimeout(() => {
+        try {
+          recognition.start()
+        } catch (e) {
+          console.warn("[v0] Failed to start recognition:", e)
+        }
+      }, 300)
+    }
+
+    speechSynthesis.cancel()
+    speechSynthesis.speak(utterance)
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId)
+      recognition.stop()
+      speechSynthesis.cancel()
+      setIsListening(false)
     }
-  }, [step, awaitingConfirmation, current])
+  }, [step, current, awaitingConfirmation])
 
   const handleProposedAnswer = (answer: string) => {
     setPendingAnswer(answer)
@@ -108,7 +193,18 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
     setAwaitingConfirmation(false)
 
     if (isLastStep) {
-      onComplete(newData)
+      const transcriptParts = [
+        `Type: ${newData.type}`,
+        `Vaktelefon: ${newData.vakttlf}`,
+        newData.caller ? `Ringer: ${newData.caller}` : "",
+        newData.reason ? `Hendelse: ${newData.reason}` : "",
+        newData.action ? `Tiltak: ${newData.action}` : "",
+      ].filter(Boolean)
+
+      const combinedTranscript = transcriptParts.join(". ")
+
+      // Add transcript to data
+      onComplete({ ...newData, transcript: combinedTranscript })
     } else {
       setStep(step + 1)
     }
@@ -155,6 +251,13 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
 
           <h2 className="text-3xl font-bold text-white mb-4">🎙️ Voice Logg</h2>
 
+          {isListening && !awaitingConfirmation && (
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Mic className="h-5 w-5 text-[#ff6b35] animate-pulse" />
+              <span className="text-[#ff6b35] text-sm font-semibold">Lytter ...</span>
+            </div>
+          )}
+
           {awaitingConfirmation ? (
             <p className="text-2xl text-white mb-8">Stemmer det jeg registrerte?</p>
           ) : (
@@ -165,6 +268,10 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
           {awaitingConfirmation && pendingAnswer ? (
             <div className="bg-[#2a3442] p-4 rounded-lg mb-6 border-2 border-[#ff6b35]">
               <p className="text-lg text-white font-semibold">"{pendingAnswer}"</p>
+            </div>
+          ) : liveTranscript ? (
+            <div className="bg-[#2a3442] p-4 rounded-lg mb-6">
+              <p className="text-lg text-white italic">"{liveTranscript}"</p>
             </div>
           ) : transcript ? (
             <div className="bg-[#2a3442] p-4 rounded-lg mb-6">

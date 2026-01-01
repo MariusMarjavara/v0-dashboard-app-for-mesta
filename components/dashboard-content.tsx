@@ -208,6 +208,7 @@ export function DashboardContent({
   }
 
   const handleVoiceFlowComplete = async (data: Record<string, string>) => {
+    console.log("[v0] ✅ VoiceFlow complete, data:", data)
     setVoiceConfirmData(data)
     setVoiceFlowActive(false)
   }
@@ -215,18 +216,32 @@ export function DashboardContent({
   const handleVoiceConfirm = async () => {
     if (!voiceAudioBlob || !voiceConfirmData) return
 
+    const finalTranscript = voiceConfirmData.transcript || voiceTranscript || "Voice memo"
+
+    if (!finalTranscript || finalTranscript.trim().length < 3) {
+      console.error("[v0] ❌ Transcript missing or invalid", voiceConfirmData)
+      toast.error("Kunne ikke registrere tale – prøv igjen")
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+      return
+    }
+
+    console.log("[v0] 📤 Submitting voice memo with transcript:", finalTranscript)
+
     const metadata = {
       type: voiceConfirmData.type === "ja" ? "loggbok" : "notat",
       userId: user.id,
+      userName: userName, // Add userName for registered_by_name
       contractArea,
       contractNummer,
       timestamp: new Date().toISOString(),
-      transcript: voiceTranscript,
+      transcript: finalTranscript,
       vakttlf: voiceConfirmData.vakttlf === "ja",
       ringer: voiceConfirmData.caller,
       hendelse: voiceConfirmData.reason,
       tiltak: voiceConfirmData.action,
     }
+
+    console.log("[v0] 📦 Metadata being sent:", metadata)
 
     const formData = new FormData()
     formData.append("audio", voiceAudioBlob, "voice-memo.webm")
@@ -241,8 +256,13 @@ export function DashboardContent({
       if (response.ok) {
         toast.success("Voice memo lagret!")
         if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+      } else {
+        const errorData = await response.json()
+        console.error("[v0] ❌ API error:", errorData)
+        toast.error("Kunne ikke lagre voice memo")
       }
     } catch (error) {
+      console.error("[v0] ❌ Submission error:", error)
       toast.error("Kunne ikke lagre voice memo")
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200])
     }

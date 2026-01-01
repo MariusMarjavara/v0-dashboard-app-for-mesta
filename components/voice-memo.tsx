@@ -5,13 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Mic, Square, Loader2, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
-import type { VoiceMemoType, VoiceMemoMetadata, OfflineVoiceMemo } from "@/lib/types"
-
-interface VoiceMemoProps {
-  userId: string
-  contractArea: string
-  contractNummer?: number
-}
+import type { VoiceMemoType, VoiceMemoMetadata, OfflineVoiceMemo, VoiceMemoProps } from "@/lib/types"
+import { VoiceFlow } from "./voice-flow"
 
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -52,6 +47,9 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   const [hendelse, setHendelse] = useState("")
   const [tiltak, setTiltak] = useState("")
 
+  const [flowStarted, setFlowStarted] = useState(false)
+  const [showVoiceFlow, setShowVoiceFlow] = useState(false)
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunks = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout>()
@@ -84,13 +82,23 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   }, [])
 
   async function startRecording() {
+    console.log("[v0] 🎤 VoiceMemo: startRecording called")
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream)
+      console.log("[v0] 🎤 VoiceMemo: Got media stream")
 
-      recorder.ondataavailable = (e) => chunks.current.push(e.data)
+      const recorder = new MediaRecorder(stream)
+      console.log("[v0] 🎤 VoiceMemo: MediaRecorder created, state:", recorder.state)
+
+      recorder.ondataavailable = (e) => {
+        console.log("[v0] 🎤 VoiceMemo: Data available, size:", e.data.size)
+        chunks.current.push(e.data)
+      }
+
       recorder.onstop = () => {
+        console.log("[v0] 🎧 VoiceMemo: Recording stopped, chunks:", chunks.current.length)
         const blob = new Blob(chunks.current, { type: "audio/webm" })
+        console.log("[v0] 🎧 VoiceMemo: Audio blob size:", blob.size)
         setAudioBlob(blob)
         setOpen(true)
         chunks.current = []
@@ -98,6 +106,7 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
       }
 
       recorder.start()
+      console.log("[v0] 🎤 VoiceMemo: MediaRecorder.start() called")
       mediaRecorderRef.current = recorder
       setRecording(true)
       setRecordingTime(0)
@@ -106,11 +115,13 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
         setRecordingTime((t) => t + 1)
       }, 1000)
     } catch (error) {
+      console.error("[v0] ❌ VoiceMemo: Recording error:", error)
       toast.error("Kunne ikke starte opptak. Sjekk mikrofontillatelser.")
     }
   }
 
   function stopRecording() {
+    console.log("[v0] 🛑 VoiceMemo: stopRecording called")
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop()
       setRecording(false)
@@ -119,6 +130,7 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
   }
 
   async function uploadVoiceMemo(blob: Blob, metadata: VoiceMemoMetadata) {
+    console.log("[v0] 📤 Uploading voice memo, blob size:", blob.size, "metadata:", metadata)
     const formData = new FormData()
     formData.append("audio", blob, "voice-memo.webm")
     formData.append("metadata", JSON.stringify(metadata))
@@ -129,10 +141,13 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
     })
 
     if (!response.ok) throw new Error("Upload feilet")
-    return response.json()
+    const result = await response.json()
+    console.log("[v0] ✅ Upload response:", result)
+    return result
   }
 
   async function transcribeAudio(blob: Blob): Promise<string> {
+    console.log("[v0] 🧠 Starting transcription, blob size:", blob.size)
     try {
       const formData = new FormData()
       formData.append("file", blob, "voice-memo.webm")
@@ -143,18 +158,22 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
       })
 
       if (!response.ok) {
+        console.error("[v0] ❌ Transcription failed:", response.status)
         return "[Transkribering feilet]"
       }
 
       const data = await response.json()
+      console.log("[v0] 🧠 Transcription result:", data.text)
       return data.text || "[Transkribering feilet]"
     } catch (error) {
-      console.error("Transcription error:", error)
+      console.error("[v0] ❌ Transcription error:", error)
       return "[Transkribering feilet]"
     }
   }
 
   function autoSuggestFromTranscript(text: string) {
+    if (flowStarted) return // Never run after VoiceFlow begins
+
     const lowerText = text.toLowerCase()
 
     // Only set vakttlf if it's false (never overwrite explicit "Nei")
@@ -187,8 +206,43 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
     }
   }
 
-  async function handleSubmit() {
-    if (!audioBlob || !type) return
+  async function handleVoiceFlowComplete(finalData: Record<string, string>) {
+    console.log("[v0] 🎙️ VOICE FLOW COMPLETE DATA:", finalData)
+
+    // Extract data from the finalData object
+    const isLoggbok = finalData.type === "ja"
+    const vakttlfValue = finalData.vakttlf === "ja"
+
+    if (isLoggbok) {
+      await submitVoiceMemo({
+        vakttlf: vakttlfValue,
+        ringer: finalData.caller || "",
+        hendelse: finalData.reason || "",
+        tiltak: finalData.action || "",
+      })
+    } else {
+      await submitVoiceMemo({})
+    }
+  }
+
+  async function submitVoiceMemo(finalData: {
+    vakttlf?: boolean
+    ringer?: string
+    hendelse?: string
+    tiltak?: string
+  }) {
+    console.log("[v0] 💾 SUBMIT VOICE MEMO called with finalData:", finalData)
+
+    if (!audioBlob || !type) {
+      console.error("[v0] ❌ Missing audioBlob or type:", { audioBlob: !!audioBlob, type })
+      return
+    }
+
+    console.log("[v0] 💾 VOICE SUBMIT DATA", {
+      type,
+      finalData,
+      transcript: transcription,
+    })
 
     setUploading(true)
 
@@ -208,14 +262,13 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
         contractArea,
         contractNummer,
         timestamp: new Date().toISOString(),
-        transcript, // This is now always populated
-        ...(type === "loggbok" && {
-          vakttlf,
-          ringer,
-          hendelse,
-          tiltak,
-        }),
+        transcript,
+        ...(type === "loggbok" && finalData),
       }
+
+      await uploadVoiceMemo(audioBlob, metadata)
+      toast.success("Voice memo lagret!")
+      resetForm()
     } catch (error) {
       // Offline fallback - still saves with transcript
       try {
@@ -229,12 +282,7 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
           contractNummer,
           timestamp: new Date().toISOString(),
           transcript: transcription || "[Offline - ingen transkripsjon]",
-          ...(type === "loggbok" && {
-            vakttlf,
-            ringer,
-            hendelse,
-            tiltak,
-          }),
+          ...(type === "loggbok" && finalData),
         }
 
         offlineItems.push({
@@ -253,21 +301,30 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
     }
   }
 
+  async function handleManualSubmit() {
+    await submitVoiceMemo({
+      vakttlf,
+      ringer,
+      hendelse,
+      tiltak,
+    })
+  }
+
   useEffect(() => {
-    if (audioBlob && open && type && !transcription && !transcribing) {
+    if (audioBlob && open && type && !transcription && !transcribing && !flowStarted) {
       ;(async () => {
         setTranscribing(true)
         const transcript = await transcribeAudio(audioBlob)
         setTranscription(transcript)
         setTranscribing(false)
 
-        // Auto-suggest only after transcription completes
-        if (transcript && type === "loggbok") {
+        // Auto-suggest only if flow hasn't started
+        if (transcript && type === "loggbok" && !flowStarted) {
           autoSuggestFromTranscript(transcript)
         }
       })()
     }
-  }, [audioBlob, open, type])
+  }, [audioBlob, open, type, flowStarted])
 
   function resetForm() {
     setOpen(false)
@@ -279,6 +336,8 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
     setRinger("")
     setHendelse("")
     setTiltak("")
+    setFlowStarted(false)
+    setShowVoiceFlow(false)
   }
 
   const formatTime = (seconds: number) => {
@@ -301,175 +360,209 @@ export function VoiceMemo({ userId, contractArea, contractNummer }: VoiceMemoPro
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-full sm:h-auto h-[100dvh] rounded-none sm:rounded-lg bg-[#0b1f3a] text-white border-orange-500/20">
-          <DialogHeader>
-            <DialogTitle className="text-xl">
-              {!type ? "Hva vil du registrere?" : type === "loggbok" ? "Loggbok" : "Notat"}
-            </DialogTitle>
-          </DialogHeader>
-
-          {transcribing && (
-            <div className="flex items-center gap-2 text-sm text-orange-400 bg-orange-500/10 p-3 rounded">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Transkriberer opptak...
-            </div>
+          {showVoiceFlow && (
+            <VoiceFlow
+              transcript={transcription}
+              onComplete={handleVoiceFlowComplete}
+              onCancel={() => {
+                setShowVoiceFlow(false)
+                setFlowStarted(false)
+              }}
+            />
           )}
 
-          {transcription && (
-            <div className="p-3 bg-[#1a2332] rounded border border-gray-600">
-              <p className="text-xs text-gray-400 mb-1">Transkripsjon:</p>
-              <p className="text-sm text-gray-200">{transcription}</p>
-            </div>
-          )}
+          {!showVoiceFlow && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">
+                  {!type ? "Hva vil du registrere?" : type === "loggbok" ? "Loggbok" : "Notat"}
+                </DialogTitle>
+              </DialogHeader>
 
-          {!type ? (
-            <div className="space-y-3">
-              <Button
-                onClick={() => setType("loggbok")}
-                className="w-full h-20 text-xl bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform"
-              >
-                LOGGBOK
-              </Button>
-              <Button
-                onClick={() => setType("notat")}
-                className="w-full h-20 text-xl bg-blue-500 hover:bg-blue-600 active:scale-95 transition-transform"
-              >
-                NOTAT
-              </Button>
-            </div>
-          ) : type === "loggbok" ? (
-            <div className="space-y-4">
-              <p className="text-xs text-gray-400">Steg: {vakttlf ? "Detaljer" : "Avklaring"}</p>
-
-              <div>
-                <label className="text-sm text-gray-300 font-medium">Gjelder dette vakttlf?</label>
-                <div className="flex gap-2 mt-2">
-                  <Button
-                    onClick={() => setVakttlf(true)}
-                    variant={vakttlf ? "default" : "outline"}
-                    className="flex-1 h-14 text-base"
-                  >
-                    Ja
-                  </Button>
-                  <Button
-                    onClick={() => setVakttlf(false)}
-                    variant={!vakttlf ? "default" : "outline"}
-                    className="flex-1 h-14 text-base"
-                  >
-                    Nei
-                  </Button>
+              {transcribing && (
+                <div className="flex items-center gap-2 text-sm text-orange-400 bg-orange-500/10 p-3 rounded">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Transkriberer opptak...
                 </div>
-              </div>
-
-              {vakttlf && (
-                <>
-                  <div>
-                    <label className="text-sm text-gray-300 font-medium">Hvem ringte?</label>
-                    <select
-                      value={ringer}
-                      onChange={(e) => setRinger(e.target.value)}
-                      className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
-                    >
-                      <option value="">Velg...</option>
-                      <option value="Trafikant">Trafikant</option>
-                      <option value="Politiet">Politiet</option>
-                      <option value="Vegtrafikksentral">Vegtrafikksentral</option>
-                      <option value="AMK/Brann">AMK / Brann</option>
-                      <option value="Annet">Annet</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-gray-300 font-medium">Hva gjaldt det?</label>
-                    <select
-                      value={hendelse}
-                      onChange={(e) => setHendelse(e.target.value)}
-                      className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
-                    >
-                      <option value="">Velg...</option>
-                      <option value="Glatt vei">Glatt vei</option>
-                      <option value="Stengt vei">Stengt vei</option>
-                      <option value="Ulykke">Ulykke</option>
-                      <option value="Dårlig sikt">Dårlig sikt</option>
-                      <option value="Annet">Annet</option>
-                    </select>
-                  </div>
-                </>
               )}
 
-              <div>
-                <label className="text-sm text-gray-300 font-medium">Tiltak</label>
-                <select
-                  value={tiltak}
-                  onChange={(e) => setTiltak(e.target.value)}
-                  className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
-                >
-                  <option value="">Velg...</option>
-                  <option value="Brøyting">Brøyting</option>
-                  <option value="Strøing">Strøing</option>
-                  <option value="Befaring">Befaring</option>
-                  <option value="Ingen tiltak">Ingen tiltak</option>
-                  <option value="Eskalert">Eskalert</option>
-                </select>
-              </div>
+              {transcription && (
+                <div className="p-3 bg-[#1a2332] rounded border border-gray-600">
+                  <p className="text-xs text-gray-400 mb-1">Transkripsjon:</p>
+                  <p className="text-sm text-gray-200">{transcription}</p>
+                </div>
+              )}
 
-              <div className="rounded bg-[#101826] border border-gray-600 p-3 text-sm">
-                <p className="text-gray-400 mb-2">Registrert:</p>
-                <ul className="space-y-1">
-                  <li>
-                    Vakttlf: <strong>{vakttlf ? "Ja" : "Nei"}</strong>
-                  </li>
+              {!type ? (
+                <div className="space-y-3">
+                  <Button
+                    onClick={() => setType("loggbok")}
+                    className="w-full h-20 text-xl bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform"
+                  >
+                    LOGGBOK
+                  </Button>
+                  <Button
+                    onClick={() => setType("notat")}
+                    className="w-full h-20 text-xl bg-blue-500 hover:bg-blue-600 active:scale-95 transition-transform"
+                  >
+                    NOTAT
+                  </Button>
+                </div>
+              ) : type === "loggbok" ? (
+                <div className="space-y-4">
+                  <Button
+                    onClick={() => {
+                      setFlowStarted(true)
+                      setShowVoiceFlow(true)
+                    }}
+                    className="w-full h-14 text-base bg-purple-500 hover:bg-purple-600"
+                  >
+                    🎙️ Bruk stemmeguide
+                  </Button>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-gray-600" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-[#0b1f3a] px-2 text-gray-400">eller fyll ut manuelt</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400">Steg: {vakttlf ? "Detaljer" : "Avklaring"}</p>
+
+                  <div>
+                    <label className="text-sm text-gray-300 font-medium">Gjelder dette vakttlf?</label>
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        onClick={() => setVakttlf(true)}
+                        variant={vakttlf ? "default" : "outline"}
+                        className="flex-1 h-14 text-base"
+                      >
+                        Ja
+                      </Button>
+                      <Button
+                        onClick={() => setVakttlf(false)}
+                        variant={!vakttlf ? "default" : "outline"}
+                        className="flex-1 h-14 text-base"
+                      >
+                        Nei
+                      </Button>
+                    </div>
+                  </div>
+
                   {vakttlf && (
-                    <li>
-                      Ringer: <strong>{ringer || "–"}</strong>
-                    </li>
-                  )}
-                  {vakttlf && (
-                    <li>
-                      Hendelse: <strong>{hendelse || "–"}</strong>
-                    </li>
-                  )}
-                  <li>
-                    Tiltak: <strong>{tiltak || "–"}</strong>
-                  </li>
-                </ul>
-              </div>
+                    <>
+                      <div>
+                        <label className="text-sm text-gray-300 font-medium">Hvem ringte?</label>
+                        <select
+                          value={ringer}
+                          onChange={(e) => setRinger(e.target.value)}
+                          className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
+                        >
+                          <option value="">Velg...</option>
+                          <option value="Trafikant">Trafikant</option>
+                          <option value="Politiet">Politiet</option>
+                          <option value="Vegtrafikksentral">Vegtrafikksentral</option>
+                          <option value="AMK/Brann">AMK / Brann</option>
+                          <option value="Annet">Annet</option>
+                        </select>
+                      </div>
 
-              <Button
-                onClick={handleSubmit}
-                disabled={uploading || (vakttlf && (!ringer || !hendelse || !tiltak))}
-                className="w-full h-14 text-base bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2" /> Lagrer...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2" /> Lagre loggbok
-                  </>
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-gray-300 text-sm">Lydopptaket vil bli lagret sammen med notatet.</p>
+                      <div>
+                        <label className="text-sm text-gray-300 font-medium">Hva gjaldt det?</label>
+                        <select
+                          value={hendelse}
+                          onChange={(e) => setHendelse(e.target.value)}
+                          className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
+                        >
+                          <option value="">Velg...</option>
+                          <option value="Glatt vei">Glatt vei</option>
+                          <option value="Stengt vei">Stengt vei</option>
+                          <option value="Ulykke">Ulykke</option>
+                          <option value="Dårlig sikt">Dårlig sikt</option>
+                          <option value="Annet">Annet</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
 
-              <Button
-                onClick={handleSubmit}
-                disabled={uploading}
-                className="w-full h-14 text-base bg-blue-500 hover:bg-blue-600 active:scale-95 transition-transform"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2" /> Lagrer...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2" /> Lagre notat
-                  </>
-                )}
-              </Button>
-            </div>
+                  <div>
+                    <label className="text-sm text-gray-300 font-medium">Tiltak</label>
+                    <select
+                      value={tiltak}
+                      onChange={(e) => setTiltak(e.target.value)}
+                      className="w-full mt-2 p-4 text-base rounded bg-[#1a2332] border border-gray-600 text-white"
+                    >
+                      <option value="">Velg...</option>
+                      <option value="Brøyting">Brøyting</option>
+                      <option value="Strøing">Strøing</option>
+                      <option value="Befaring">Befaring</option>
+                      <option value="Ingen tiltak">Ingen tiltak</option>
+                      <option value="Eskalert">Eskalert</option>
+                    </select>
+                  </div>
+
+                  <div className="rounded bg-[#101826] border border-gray-600 p-3 text-sm">
+                    <p className="text-gray-400 mb-2">Registrert:</p>
+                    <ul className="space-y-1">
+                      <li>
+                        Vakttlf: <strong>{vakttlf ? "Ja" : "Nei"}</strong>
+                      </li>
+                      {vakttlf && (
+                        <li>
+                          Ringer: <strong>{ringer || "–"}</strong>
+                        </li>
+                      )}
+                      {vakttlf && (
+                        <li>
+                          Hendelse: <strong>{hendelse || "–"}</strong>
+                        </li>
+                      )}
+                      <li>
+                        Tiltak: <strong>{tiltak || "–"}</strong>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <Button
+                    onClick={handleManualSubmit}
+                    disabled={uploading || (vakttlf && (!ringer || !hendelse || !tiltak))}
+                    className="w-full h-14 text-base bg-orange-500 hover:bg-orange-600 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="animate-spin mr-2" /> Lagrer...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2" /> Lagre loggbok
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-gray-300 text-sm">Lydopptaket vil bli lagret sammen med notatet.</p>
+
+                  <Button
+                    onClick={() => submitVoiceMemo({})}
+                    disabled={uploading}
+                    className="w-full h-14 text-base bg-blue-500 hover:bg-blue-600 active:scale-95 transition-transform"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="animate-spin mr-2" /> Lagrer...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2" /> Lagre notat
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </DialogContent>
       </Dialog>
