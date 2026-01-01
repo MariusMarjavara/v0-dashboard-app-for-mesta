@@ -51,19 +51,23 @@ export async function POST(req: NextRequest) {
 
     const row = {
       user_id: metadata.userId,
-      registered_by_name: metadata.userName, // Added registered_by_name from metadata
+      registered_by_name: metadata.userName,
       registration_type: REGISTRATION_TYPES.VOICE_MEMO,
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
       data: {
-        type: metadata.type,
-        vakttlf: metadata.vakttlf,
-        ringer: metadata.ringer,
-        hendelse: metadata.hendelse,
-        tiltak: metadata.tiltak,
-        transcript,
+        // Voice flow answers
+        type: metadata.type, // 'loggbok' or 'notat'
+        vakttlf: metadata.vakttlf, // boolean
+        ringer: metadata.ringer, // string
+        hendelse: metadata.hendelse, // string
+        tiltak: metadata.tiltak, // string
+        transcript, // Combined transcript from voice flow
         timestamp: metadata.timestamp,
         operationalStatus: status,
+        // Source tracking
+        source: "voice" as const, // Indicates this was voice-collected
+        confidence: metadata.confidence || {}, // Voice recognition confidence scores
       },
     }
 

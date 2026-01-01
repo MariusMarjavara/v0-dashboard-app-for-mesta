@@ -111,6 +111,14 @@ export async function GET(request: Request) {
         break
       case "voice_memo":
         const voiceType = reg.data.type === "loggbok" ? "Loggbok" : "Notat"
+        const confidence = reg.data.confidence || {}
+        const avgConfidence = Object.values(confidence).length
+          ? (
+              (Object.values(confidence).reduce((a: any, b: any) => a + b, 0) / Object.values(confidence).length) *
+              100
+            ).toFixed(0) + "%"
+          : "-"
+
         exportData.voice_memo.push({
           ...baseData,
           Type: `Voice ${voiceType}`,
@@ -120,6 +128,8 @@ export async function GET(request: Request) {
           Tiltak: reg.data.tiltak || "-",
           Transkripsjon: reg.data.transcript || "-",
           Kontrakt: reg.contract_area || "-",
+          "Operativ status": reg.data.operationalStatus || "-",
+          "Tale-kvalitet": avgConfidence, // Average voice recognition confidence
         })
         break
     }
