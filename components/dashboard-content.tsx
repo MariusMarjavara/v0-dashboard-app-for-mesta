@@ -31,6 +31,7 @@ import { getRegistrationCardsForUser } from "@/lib/registration-cards"
 import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
 import type { RegistrationType } from "@/types"
+import type { VoiceInterpretation } from "@/types/voice"
 
 interface DashboardContentProps {
   userId: string
@@ -201,11 +202,40 @@ export function DashboardContent({
 
       if (response.ok) {
         const data = await response.json()
-        setVoiceTranscript(data.text || "")
-      }
-    } catch (error) {}
+        const transcript = data.text || ""
+        setVoiceTranscript(transcript)
 
-    setVoiceFlowActive(true)
+        const interpretation = interpretVoiceMemo(transcript)
+        console.log("[v0] 🧠 Interpretation:", interpretation)
+
+        if (interpretation.confidence >= 0.7) {
+          console.log("[v0] ✅ High confidence, skipping to confirmation")
+          // Go directly to confirmation screen
+          setVoiceConfirmData({
+            transcript,
+            interpretation: JSON.stringify(interpretation),
+          })
+        } else {
+          console.log("[v0] ⚠️ Low confidence, starting guided flow")
+          // Start guided voice flow for clarification
+          setVoiceFlowActive(true)
+        }
+      }
+    } catch (error) {
+      console.error("[v0] ❌ Transcription error:", error)
+      toast.error("Kunne ikke transkribere tale")
+    }
+  }
+
+  const interpretVoiceMemo = (transcript: string): VoiceInterpretation => {
+    // Placeholder function for interpreting voice memo
+    return {
+      type: "loggbok",
+      confidence: 0.8,
+      overridden: false,
+      extracted: {},
+      summary: "Summary of the voice memo",
+    }
   }
 
   const handleVoiceFlowComplete = async (data: Record<string, string>) => {
@@ -218,6 +248,7 @@ export function DashboardContent({
     type: RegistrationType
     confidence: number
     overridden: boolean
+    interpretation: VoiceInterpretation
   }) => {
     if (!voiceAudioBlob || !voiceConfirmData) return
 
@@ -233,21 +264,19 @@ export function DashboardContent({
     console.log("[v0] 📤 Submitting with classification:", classification)
 
     const metadata = {
-      type: voiceConfirmData.type === "ja" ? "loggbok" : "notat",
+      type: classification.type,
       userId: user.id,
       userName: userName,
       contractArea,
       contractNummer,
       timestamp: new Date().toISOString(),
       transcript: finalTranscript,
-      vakttlf: voiceConfirmData.vakttlf === "ja",
-      ringer: voiceConfirmData.caller,
-      hendelse: voiceConfirmData.reason,
-      tiltak: voiceConfirmData.action,
+      extracted: classification.interpretation.extracted,
       classification: {
         registration_type: classification.type,
         confidence: classification.confidence,
         overridden: classification.overridden,
+        summary: classification.interpretation.summary,
       },
     }
 
@@ -280,6 +309,12 @@ export function DashboardContent({
     setVoiceConfirmData(null)
     setVoiceTranscript("")
     setVoiceAudioBlob(null)
+  }
+
+  const handleVoiceEdit = () => {
+    console.log("[v0] ✏️ User wants to edit, opening guided flow")
+    setVoiceFlowActive(true)
+    setVoiceConfirmData(null)
   }
 
   const handleVoiceCancel = () => {
@@ -458,9 +493,9 @@ export function DashboardContent({
       {/* Voice Confirmation Screen */}
       {voiceConfirmData && (
         <VoiceConfirm
-          summary={buildVoiceSummary(voiceConfirmData)}
           transcript={voiceConfirmData.transcript || voiceTranscript}
           onConfirm={handleVoiceConfirm}
+          onEdit={handleVoiceEdit}
           onCancel={handleVoiceCancel}
         />
       )}
