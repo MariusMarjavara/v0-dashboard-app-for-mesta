@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { getRegistrationCardsForUser } from "@/lib/registration-cards"
 import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
+import type { RegistrationType } from "@/types"
 
 interface DashboardContentProps {
   userId: string
@@ -213,7 +214,11 @@ export function DashboardContent({
     setVoiceFlowActive(false)
   }
 
-  const handleVoiceConfirm = async () => {
+  const handleVoiceConfirm = async (classification: {
+    type: RegistrationType
+    confidence: number
+    overridden: boolean
+  }) => {
     if (!voiceAudioBlob || !voiceConfirmData) return
 
     const finalTranscript = voiceConfirmData.transcript || voiceTranscript || "Voice memo"
@@ -225,12 +230,12 @@ export function DashboardContent({
       return
     }
 
-    console.log("[v0] 📤 Submitting voice memo with transcript:", finalTranscript)
+    console.log("[v0] 📤 Submitting with classification:", classification)
 
     const metadata = {
       type: voiceConfirmData.type === "ja" ? "loggbok" : "notat",
       userId: user.id,
-      userName: userName, // Add userName for registered_by_name
+      userName: userName,
       contractArea,
       contractNummer,
       timestamp: new Date().toISOString(),
@@ -239,6 +244,11 @@ export function DashboardContent({
       ringer: voiceConfirmData.caller,
       hendelse: voiceConfirmData.reason,
       tiltak: voiceConfirmData.action,
+      classification: {
+        registration_type: classification.type,
+        confidence: classification.confidence,
+        overridden: classification.overridden,
+      },
     }
 
     console.log("[v0] 📦 Metadata being sent:", metadata)
@@ -267,6 +277,12 @@ export function DashboardContent({
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200])
     }
 
+    setVoiceConfirmData(null)
+    setVoiceTranscript("")
+    setVoiceAudioBlob(null)
+  }
+
+  const handleVoiceCancel = () => {
     setVoiceConfirmData(null)
     setVoiceTranscript("")
     setVoiceAudioBlob(null)
@@ -441,7 +457,12 @@ export function DashboardContent({
 
       {/* Voice Confirmation Screen */}
       {voiceConfirmData && (
-        <VoiceConfirm summary={buildVoiceSummary(voiceConfirmData)} onConfirm={handleVoiceConfirm} />
+        <VoiceConfirm
+          summary={buildVoiceSummary(voiceConfirmData)}
+          transcript={voiceConfirmData.transcript || voiceTranscript}
+          onConfirm={handleVoiceConfirm}
+          onCancel={handleVoiceCancel}
+        />
       )}
 
       {/* Bottom Navigation for Car Mode */}

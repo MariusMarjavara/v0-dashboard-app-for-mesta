@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { calculateOperationalStatus } from "@/lib/operational-status"
-import { REGISTRATION_TYPES } from "@/lib/types"
+import { classifyVoiceTranscript } from "@/lib/voice/classify"
 
 export async function POST(req: NextRequest) {
   console.log("[v0] 🧠 /api/voice hit")
@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
     const transcript = metadata.transcript
     console.log("[v0] 🧠 Transcript:", transcript)
 
+    const classification = classifyVoiceTranscript(transcript)
+    console.log("[v0] 🎯 Classification:", classification)
+
     const status = calculateOperationalStatus({
       transcript,
       hendelse: metadata.hendelse,
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
     const row = {
       user_id: metadata.userId,
       registered_by_name: metadata.userName,
-      registration_type: REGISTRATION_TYPES.VOICE_MEMO,
+      registration_type: classification.registration_type,
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
       data: {
@@ -65,6 +68,13 @@ export async function POST(req: NextRequest) {
         transcript, // Combined transcript from voice flow
         timestamp: metadata.timestamp,
         operationalStatus: status,
+        // Classification metadata
+        classification: {
+          type: classification.registration_type,
+          subcategory: classification.subcategory,
+          confidence: classification.confidence,
+          keywords: classification.keywords,
+        },
         // Source tracking
         source: "voice" as const, // Indicates this was voice-collected
         confidence: metadata.confidence || {}, // Voice recognition confidence scores

@@ -10,14 +10,31 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const router = useRouter()
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        router.push("/dashboard")
+      } else {
+        setCheckingAuth(false)
+      }
+    }
+    checkUser()
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,6 +46,9 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: {
+          persistSession: rememberMe, // Session stored if true, only in memory if false
+        },
       })
       if (error) throw error
       router.push("/dashboard")
@@ -37,6 +57,10 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (checkingAuth) {
+    return null
   }
 
   return (
@@ -89,6 +113,16 @@ export default function LoginPage() {
                   className="bg-secondary border-border text-white"
                 />
               </div>
+              <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-5 w-5 accent-mesta-orange cursor-pointer"
+                />
+                <span>Forbli innlogget</span>
+              </label>
+              {rememberMe && <p className="text-xs text-muted-foreground">Ikke bruk dette på delte enheter</p>}
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button
                 type="submit"
