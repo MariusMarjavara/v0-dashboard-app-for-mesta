@@ -90,6 +90,24 @@ export async function POST(req: NextRequest) {
       throw new Error("Database insert failed")
     }
 
+    if (metadata.feedback && metadata.feedback.predicted_type !== metadata.feedback.corrected_type) {
+      console.log("[v0] 📚 Storing classification feedback for adaptive learning")
+
+      const { error: feedbackError } = await supabase.from("voice_classification_feedback").insert({
+        transcript: transcript,
+        predicted_type: metadata.feedback.predicted_type,
+        corrected_type: metadata.feedback.corrected_type,
+        user_id: metadata.userId,
+      })
+
+      if (feedbackError) {
+        console.error("[v0] ⚠️ Feedback storage failed (non-critical):", feedbackError)
+        // Don't fail the request if feedback storage fails
+      } else {
+        console.log("[v0] ✅ Feedback stored successfully")
+      }
+    }
+
     console.log("[v0] ✅ Voice memo saved successfully")
 
     return NextResponse.json({

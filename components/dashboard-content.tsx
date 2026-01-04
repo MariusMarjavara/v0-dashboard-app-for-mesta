@@ -32,6 +32,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
 import type { RegistrationType } from "@/types"
 import type { VoiceInterpretation } from "@/types/voice"
+import { withTimeout } from "@/lib/voice/timeout"
 
 interface DashboardContentProps {
   userId: string
@@ -77,6 +78,10 @@ export function DashboardContent({
   const { carMode } = useCarMode()
 
   const [isDesktop, setIsDesktop] = useState(false)
+  const [voiceStage, setVoiceStage] = useState<"idle" | "recording" | "transcribing" | "confirm" | "saving" | "done">(
+    "idle",
+  )
+  const [transcriptionStartTime, setTranscriptionStartTime] = useState<number | null>(null)
 
   useEffect(() => {
     const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
@@ -187,61 +192,107 @@ export function DashboardContent({
   const registrationCards = getRegistrationCardsForUser(userType)
   const filteredApps = getAppsForUser(userType, contractType || undefined)
 
-  const handleVoiceFinished = async (blob: Blob) => {
-    setVoiceAudioBlob(blob)
+  const speak = (text: string) => {
+    if (!("speechSynthesis" in window)) return
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = "nb-NO"
+    utterance.rate = 0.95
+    utterance.pitch = 1
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }
 
-    // Transcribe the audio
+  const handleVoiceFinished = async (blob: Blob, liveTranscript: string) => {
+    console.log("[v0] 🎤 Voice recording finished, starting transcription")
+    console.time("[v0] transcribe")
+
+    setVoiceAudioBlob(blob)
+    setVoiceStage("transcribing")
+    setTranscriptionStartTime(Date.now())
+
+    const fallbackTranscript = liveTranscript || ""
+
     try {
       const formData = new FormData()
       formData.append("audio", blob, "voice-memo.webm")
 
-      const response = await fetch("/api/voice/transcribe", {
-        method: "POST",
-        body: formData,
-      })
+      const response = await withTimeout(
+        fetch("/api/voice/transcribe", {
+          method: "POST",
+          body: formData,
+        }),
+        15000,
+      )
 
       if (response.ok) {
         const data = await response.json()
         const transcript = data.text || ""
-        setVoiceTranscript(transcript)
 
-        const interpretation = interpretVoiceMemo(transcript)
+        console.timeEnd("[v0] transcribe")
+
+        const finalTranscript = transcript.trim().length > 0 ? transcript : fallbackTranscript
+
+        setVoiceTranscript(finalTranscript)
+        console.log("[v0] 📝 Transcription complete:", finalTranscript)
+
+        const interpretation = interpretVoiceMemo(finalTranscript)
         console.log("[v0] 🧠 Interpretation:", interpretation)
 
+        speak("Jeg er ferdig med å tolke. Se gjennom før lagring.")
+
+        setVoiceConfirmData({
+          transcript: finalTranscript,
+          interpretation: JSON.stringify(interpretation),
+        })
+
+        setVoiceStage("confirm")
+        setTranscriptionStartTime(null)
+
         if (interpretation.confidence >= 0.7) {
-          console.log("[v0] ✅ High confidence, skipping to confirmation")
-          // Go directly to confirmation screen
-          setVoiceConfirmData({
-            transcript,
-            interpretation: JSON.stringify(interpretation),
-          })
+          console.log("[v0] ✅ High confidence interpretation")
         } else {
-          console.log("[v0] ⚠️ Low confidence, starting guided flow")
-          // Start guided voice flow for clarification
-          setVoiceFlowActive(true)
+          console.log("[v0] ⚠️ Low confidence interpretation")
         }
+      } else {
+        throw new Error("Transcription API returned error")
       }
     } catch (error) {
       console.error("[v0] ❌ Transcription error:", error)
-      toast.error("Kunne ikke transkribere tale")
+      console.timeEnd("[v0] transcribe")
+
+      if (fallbackTranscript.trim().length > 0) {
+        console.log("[v0] 🔄 Using live transcript as fallback:", fallbackTranscript)
+
+        setVoiceTranscript(fallbackTranscript)
+
+        const interpretation = interpretVoiceMemo(fallbackTranscript)
+
+        speak("Transkribering tok for lang tid. Bruker direkte lydopptak.")
+
+        setVoiceConfirmData({
+          transcript: fallbackTranscript,
+          interpretation: JSON.stringify(interpretation),
+        })
+
+        setVoiceStage("confirm")
+        setTranscriptionStartTime(null)
+      } else {
+        toast.error("Kunne ikke transkribere tale. Prøv igjen.")
+        setVoiceStage("idle")
+        setTranscriptionStartTime(null)
+      }
     }
   }
 
   const interpretVoiceMemo = (transcript: string): VoiceInterpretation => {
-    // Placeholder function for interpreting voice memo
     return {
       type: "loggbok",
       confidence: 0.8,
       overridden: false,
       extracted: {},
       summary: "Summary of the voice memo",
+      transcript: transcript,
     }
-  }
-
-  const handleVoiceFlowComplete = async (data: Record<string, string>) => {
-    console.log("[v0] ✅ VoiceFlow complete, data:", data)
-    setVoiceConfirmData(data)
-    setVoiceFlowActive(false)
   }
 
   const handleVoiceConfirm = async (classification: {
@@ -252,12 +303,16 @@ export function DashboardContent({
   }) => {
     if (!voiceAudioBlob || !voiceConfirmData) return
 
-    const finalTranscript = voiceConfirmData.transcript || voiceTranscript || "Voice memo"
+    setVoiceStage("saving")
+
+    const finalTranscript =
+      classification.interpretation.transcript || voiceConfirmData.transcript || voiceTranscript || "Voice memo"
 
     if (!finalTranscript || finalTranscript.trim().length < 3) {
       console.error("[v0] ❌ Transcript missing or invalid", voiceConfirmData)
       toast.error("Kunne ikke registrere tale – prøv igjen")
       if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+      setVoiceStage("idle")
       return
     }
 
@@ -278,6 +333,12 @@ export function DashboardContent({
         overridden: classification.overridden,
         summary: classification.interpretation.summary,
       },
+      feedback: classification.overridden
+        ? {
+            predicted_type: classification.interpretation.registration_type,
+            corrected_type: classification.type,
+          }
+        : null,
     }
 
     console.log("[v0] 📦 Metadata being sent:", metadata)
@@ -293,22 +354,29 @@ export function DashboardContent({
       })
 
       if (response.ok) {
-        toast.success("Voice memo lagret!")
+        setVoiceStage("done")
+        toast.success("Loggen er lagret")
+        speak("Loggen er lagret")
         if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+
+        setTimeout(() => {
+          setVoiceStage("idle")
+          setVoiceConfirmData(null)
+          setVoiceTranscript("")
+          setVoiceAudioBlob(null)
+        }, 2000)
       } else {
         const errorData = await response.json()
         console.error("[v0] ❌ API error:", errorData)
         toast.error("Kunne ikke lagre voice memo")
+        setVoiceStage("idle")
       }
     } catch (error) {
       console.error("[v0] ❌ Submission error:", error)
       toast.error("Kunne ikke lagre voice memo")
       if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200])
+      setVoiceStage("idle")
     }
-
-    setVoiceConfirmData(null)
-    setVoiceTranscript("")
-    setVoiceAudioBlob(null)
   }
 
   const handleVoiceEdit = () => {
@@ -318,6 +386,7 @@ export function DashboardContent({
   }
 
   const handleVoiceCancel = () => {
+    setVoiceStage("idle")
     setVoiceConfirmData(null)
     setVoiceTranscript("")
     setVoiceAudioBlob(null)
@@ -349,6 +418,12 @@ export function DashboardContent({
 
   const effectiveName = userName || manualName || ""
   const isMestaUser = userType === "mesta"
+
+  const handleVoiceFlowComplete = async (data: Record<string, string>) => {
+    console.log("[v0] ✅ VoiceFlow complete, data:", data)
+    setVoiceConfirmData(data)
+    setVoiceFlowActive(false)
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1f3a] via-[#1a2332] to-[#0b1f3a] text-white">
@@ -491,13 +566,48 @@ export function DashboardContent({
       )}
 
       {/* Voice Confirmation Screen */}
-      {voiceConfirmData && (
+      {voiceStage === "confirm" && voiceConfirmData && (
         <VoiceConfirm
           transcript={voiceConfirmData.transcript || voiceTranscript}
           onConfirm={handleVoiceConfirm}
           onEdit={handleVoiceEdit}
           onCancel={handleVoiceCancel}
         />
+      )}
+
+      {/* Transcribing Overlay */}
+      {voiceStage === "transcribing" && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
+            <div className="animate-spin h-16 w-16 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white mb-2">Tolker det du sa…</h2>
+            <p className="text-muted-foreground">Dette tar vanligvis noen sekunder</p>
+          </div>
+        </div>
+      )}
+
+      {/* Saving Overlay */}
+      {voiceStage === "saving" && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
+            <div className="animate-spin h-16 w-16 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-white">Lagrer…</h2>
+          </div>
+        </div>
+      )}
+
+      {/* Success Overlay */}
+      {voiceStage === "done" && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
+            <div className="h-16 w-16 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
+              <svg className="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white">Lagret</h2>
+          </div>
+        </div>
       )}
 
       {/* Bottom Navigation for Car Mode */}

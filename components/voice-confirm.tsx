@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { interpretVoiceMemo, type VoiceInterpretation } from "@/lib/voice/classify"
 import { ClassificationSelector } from "@/components/classification-selector"
 import type { RegistrationType } from "@/lib/types"
 import { Button } from "@/components/ui/button"
+import { speak } from "@/lib/voice/speak"
 
 interface VoiceConfirmProps {
   transcript: string
@@ -22,6 +23,14 @@ export function VoiceConfirm({ transcript, onConfirm, onEdit, onCancel }: VoiceC
   const interpretation = interpretVoiceMemo(transcript)
   const [selectedType, setSelectedType] = useState<RegistrationType>(interpretation.registration_type)
   const [wasOverridden, setWasOverridden] = useState(false)
+  const [isEditingTranscript, setIsEditingTranscript] = useState(false)
+  const [editedTranscript, setEditedTranscript] = useState(transcript)
+
+  useEffect(() => {
+    const typeName = interpretation.registration_type.replace("_", " ")
+    const summary = `Jeg har registrert dette som ${typeName}. Stemmer det?`
+    speak(summary)
+  }, [])
 
   const handleTypeChange = (newType: RegistrationType) => {
     setSelectedType(newType)
@@ -30,12 +39,18 @@ export function VoiceConfirm({ transcript, onConfirm, onEdit, onCancel }: VoiceC
   }
 
   const handleConfirm = () => {
+    const finalTranscript = isEditingTranscript ? editedTranscript : transcript
     onConfirm({
       type: selectedType,
       confidence: interpretation.confidence,
       overridden: wasOverridden,
-      interpretation,
+      interpretation: { ...interpretation, transcript: finalTranscript },
     })
+  }
+
+  const handleRepeatSpeech = () => {
+    const typeName = selectedType.replace("_", " ")
+    speak(`Jeg tolket dette som ${typeName}. Stemmer det?`)
   }
 
   return (
@@ -81,6 +96,28 @@ export function VoiceConfirm({ transcript, onConfirm, onEdit, onCancel }: VoiceC
         )}
       </div>
 
+      <div className="w-full max-w-md mb-4">
+        <div className="rounded-xl bg-black/40 p-4 mb-2">
+          {isEditingTranscript ? (
+            <textarea
+              value={editedTranscript}
+              onChange={(e) => setEditedTranscript(e.target.value)}
+              className="w-full bg-transparent text-white text-lg outline-none resize-none"
+              rows={4}
+              autoFocus
+            />
+          ) : (
+            <p className="text-lg text-white leading-relaxed">{editedTranscript}</p>
+          )}
+        </div>
+        <button
+          onClick={() => setIsEditingTranscript(!isEditingTranscript)}
+          className="text-sm text-orange-400 underline"
+        >
+          {isEditingTranscript ? "Ferdig" : "Rediger tekst"}
+        </button>
+      </div>
+
       <p className="text-lg text-gray-400 mb-6">Stemmer det?</p>
 
       <ClassificationSelector value={selectedType} confidence={interpretation.confidence} onChange={handleTypeChange} />
@@ -92,6 +129,14 @@ export function VoiceConfirm({ transcript, onConfirm, onEdit, onCancel }: VoiceC
         >
           ✔️ STEMMER
         </button>
+
+        <Button
+          onClick={handleRepeatSpeech}
+          variant="outline"
+          className="text-lg px-8 py-4 border-white/30 hover:border-white/50 bg-transparent"
+        >
+          🔊 Les opp igjen
+        </Button>
 
         {onEdit && interpretation.confidence < 0.7 && (
           <Button
