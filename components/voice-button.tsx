@@ -4,21 +4,11 @@ import { useState, useRef } from "react"
 import { Mic } from "lucide-react"
 import { useCarMode } from "./car-mode-provider"
 import { ActiveRecordingOverlay } from "./active-recording-overlay"
+import { speak, systemIsSpeaking } from "@/lib/voice/tts"
 
 interface VoiceButtonProps {
   onFinished: (blob: Blob, liveTranscript: string) => void
   disabled?: boolean
-}
-
-const speak = (text: string) => {
-  if (!("speechSynthesis" in window)) return
-
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = "nb-NO"
-  utterance.rate = 0.95
-  utterance.pitch = 1
-  window.speechSynthesis.cancel()
-  window.speechSynthesis.speak(utterance)
 }
 
 export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
@@ -28,7 +18,8 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunks = useRef<Blob[]>([])
   const recognitionRef = useRef<any>(null)
-  const liveTranscriptRef = useRef<string>("")
+  const finalTranscriptRef = useRef<string>("")
+  const interimTranscriptRef = useRef<string>("")
 
   console.log("[v0] 🎛️ VoiceButton render, carMode:", carMode, "disabled:", disabled)
 
@@ -49,6 +40,8 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
       mediaRef.current = mediaRecorder
       chunks.current = []
+      finalTranscriptRef.current = ""
+      interimTranscriptRef.current = ""
 
       mediaRecorder.ondataavailable = (e) => {
         console.log("[v0] 🎤 Data available, size:", e.data.size)
@@ -59,8 +52,8 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
         console.log("[v0] 🎧 Recording stopped, chunks:", chunks.current.length)
         const blob = new Blob(chunks.current, { type: supported ? mimeType : "audio/webm" })
         console.log("[v0] 🎧 Audio blob created, size:", blob.size, "type:", blob.type)
-        console.log("[v0] 📦 Calling onFinished with blob and liveTranscript:", liveTranscriptRef.current)
-        onFinished(blob, liveTranscriptRef.current)
+        console.log("[v0] 📦 Calling onFinished with blob and finalTranscript:", finalTranscriptRef.current)
+        onFinished(blob, finalTranscriptRef.current)
         stream.getTracks().forEach((track) => track.stop())
       }
 
@@ -76,17 +69,40 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
         recognition.continuous = true
 
         recognition.onresult = (event: any) => {
-          let interim = ""
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            interim += event.results[i][0].transcript
+          if (systemIsSpeaking()) {
+            console.log("[v0] 🔇 Ignoring recognition while system is speaking")
+            return
           }
-          setLiveTranscript(interim)
-          liveTranscriptRef.current = interim
-          console.log("[v0] 🗣️ Live transcript:", interim)
+
+          let finalText = ""
+          let interimText = ""
+
+          for (let i = 0; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript
+            if (event.results[i].isFinal) {
+              finalText += transcript + " "
+            } else {
+              interimText += transcript
+            }
+          }
+
+          if (finalText) {
+            finalTranscriptRef.current += finalText
+            console.log("[v0] ✅ Final transcript updated:", finalTranscriptRef.current)
+          }
+
+          const displayText = finalTranscriptRef.current + interimText
+          setLiveTranscript(displayText)
+          interimTranscriptRef.current = displayText
+          console.log("[v0] 🗣️ Live transcript display:", displayText)
         }
 
         recognition.onerror = (event: any) => {
           console.error("[v0] ❌ SpeechRecognition error:", event.error)
+        }
+
+        recognition.onend = () => {
+          console.log("[v0] 🏁 SpeechRecognition ended, final transcript:", finalTranscriptRef.current)
         }
 
         recognition.start()
@@ -106,14 +122,17 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
   const stopRecording = () => {
     console.log("[v0] 🛑 stopRecording called")
-    mediaRef.current?.stop()
 
     if (recognitionRef.current) {
       recognitionRef.current.stop()
       recognitionRef.current = null
       console.log("[v0] 🗣️ SpeechRecognition stopped")
     }
-    setLiveTranscript("")
+
+    setTimeout(() => {
+      mediaRef.current?.stop()
+      setLiveTranscript("")
+    }, 200)
 
     speak("Takk")
 

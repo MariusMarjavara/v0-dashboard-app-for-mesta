@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { CheckCircle2, XCircle, Undo2, Mic } from "lucide-react"
+import { speak, systemIsSpeaking } from "@/lib/voice/tts"
 
 interface Question {
   key: string
@@ -67,15 +68,6 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
   const current = QUESTIONS[step]
   const isLastStep = step === QUESTIONS.length - 1
 
-  const speak = (text: string) => {
-    if (!("speechSynthesis" in window)) return
-    speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = "nb-NO"
-    utterance.rate = 0.9
-    speechSynthesis.speak(utterance)
-  }
-
   useEffect(() => {
     if (!current || awaitingConfirmation) return
 
@@ -98,6 +90,11 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
     }
 
     recognition.onresult = (event: any) => {
+      if (systemIsSpeaking()) {
+        console.log("[v0] 🔇 Ignoring recognition while system is speaking")
+        return
+      }
+
       const spoken = event.results[0][0].transcript
       console.log("[v0] 🎙️ Heard:", spoken)
 
@@ -142,27 +139,19 @@ export function VoiceFlow({ transcript, onComplete, onCancel }: VoiceFlowProps) 
       setIsListening(false)
     }
 
-    const utterance = new SpeechSynthesisUtterance(current.prompt)
-    utterance.lang = "nb-NO"
-    utterance.rate = 0.9
+    speak(current.prompt)
 
-    utterance.onend = () => {
-      console.log("[v0] 🔊 Prompt finished, starting to listen after 300ms buffer")
-      setTimeout(() => {
-        try {
-          recognition.start()
-        } catch (e) {
-          console.warn("[v0] Failed to start recognition:", e)
-        }
-      }, 300)
-    }
-
-    speechSynthesis.cancel()
-    speechSynthesis.speak(utterance)
+    // Start recognition after TTS completes
+    setTimeout(() => {
+      try {
+        recognition.start()
+      } catch (e) {
+        console.warn("[v0] Failed to start recognition:", e)
+      }
+    }, 1000)
 
     return () => {
       recognition.stop()
-      speechSynthesis.cancel()
       setIsListening(false)
     }
   }, [step, current, awaitingConfirmation])

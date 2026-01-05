@@ -33,6 +33,8 @@ import { VoiceConfirm } from "@/components/voice-confirm"
 import type { RegistrationType } from "@/types"
 import type { VoiceInterpretation } from "@/types/voice"
 import { withTimeout } from "@/lib/voice/timeout"
+import { speak } from "@/lib/voice/tts"
+import { cleanTranscript } from "@/lib/voice/cleanTranscript"
 
 interface DashboardContentProps {
   userId: string
@@ -82,6 +84,7 @@ export function DashboardContent({
     "idle",
   )
   const [transcriptionStartTime, setTranscriptionStartTime] = useState<number | null>(null)
+  const [transcriptionElapsed, setTranscriptionElapsed] = useState(0)
 
   useEffect(() => {
     const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
@@ -122,6 +125,18 @@ export function DashboardContent({
 
     fetchContractType()
   }, [contractNummer])
+
+  useEffect(() => {
+    if (voiceStage === "transcribing" && transcriptionStartTime) {
+      const interval = setInterval(() => {
+        setTranscriptionElapsed(Math.floor((Date.now() - transcriptionStartTime) / 1000))
+      }, 1000)
+
+      return () => clearInterval(interval)
+    } else {
+      setTranscriptionElapsed(0)
+    }
+  }, [voiceStage, transcriptionStartTime])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -192,16 +207,6 @@ export function DashboardContent({
   const registrationCards = getRegistrationCardsForUser(userType)
   const filteredApps = getAppsForUser(userType, contractType || undefined)
 
-  const speak = (text: string) => {
-    if (!("speechSynthesis" in window)) return
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = "nb-NO"
-    utterance.rate = 0.95
-    utterance.pitch = 1
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
-  }
-
   const handleVoiceFinished = async (blob: Blob, liveTranscript: string) => {
     console.log("[v0] 🎤 Voice recording finished, starting transcription")
     console.time("[v0] transcribe")
@@ -210,7 +215,7 @@ export function DashboardContent({
     setVoiceStage("transcribing")
     setTranscriptionStartTime(Date.now())
 
-    const fallbackTranscript = liveTranscript || ""
+    const fallbackTranscript = cleanTranscript(liveTranscript || "")
 
     try {
       const formData = new FormData()
@@ -226,7 +231,13 @@ export function DashboardContent({
 
       if (response.ok) {
         const data = await response.json()
-        const transcript = data.text || ""
+
+        if (data.fallbackRequired || !data.transcript) {
+          console.log("[v0] 🔄 API key not available or transcription failed, using live transcript")
+          throw new Error("Fallback required")
+        }
+
+        const transcript = cleanTranscript(data.text || data.transcript || "")
 
         console.timeEnd("[v0] transcribe")
 
@@ -260,27 +271,19 @@ export function DashboardContent({
       console.error("[v0] ❌ Transcription error:", error)
       console.timeEnd("[v0] transcribe")
 
-      if (fallbackTranscript.trim().length > 0) {
-        console.log("[v0] 🔄 Using live transcript as fallback:", fallbackTranscript)
+      setVoiceTranscript(fallbackTranscript)
 
-        setVoiceTranscript(fallbackTranscript)
+      const interpretation = interpretVoiceMemo(fallbackTranscript)
 
-        const interpretation = interpretVoiceMemo(fallbackTranscript)
+      speak("Jeg er ferdig med å tolke. Se gjennom før lagring.")
 
-        speak("Transkribering tok for lang tid. Bruker direkte lydopptak.")
+      setVoiceConfirmData({
+        transcript: fallbackTranscript,
+        interpretation: JSON.stringify(interpretation),
+      })
 
-        setVoiceConfirmData({
-          transcript: fallbackTranscript,
-          interpretation: JSON.stringify(interpretation),
-        })
-
-        setVoiceStage("confirm")
-        setTranscriptionStartTime(null)
-      } else {
-        toast.error("Kunne ikke transkribere tale. Prøv igjen.")
-        setVoiceStage("idle")
-        setTranscriptionStartTime(null)
-      }
+      setVoiceStage("confirm")
+      setTranscriptionStartTime(null)
     }
   }
 
@@ -426,7 +429,7 @@ export function DashboardContent({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0b1f3a] via-[#1a2332] to-[#0b1f3a] text-white">
+    <div className="container mx-auto p-4 pb-20 bg-gradient-to-br from-[#0b1f3a] via-[#1a2332] to-[#0b1f3a] text-white">
       {/* Header */}
       <header className="border-b border-border bg-mesta-navy-light sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -575,20 +578,28 @@ export function DashboardContent({
         />
       )}
 
-      {/* Transcribing Overlay */}
       {voiceStage === "transcribing" && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
-          <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
-            <div className="animate-spin h-16 w-16 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4" />
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
+          <div className="text-center px-6">
+            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-white mb-2">Tolker det du sa…</h2>
-            <p className="text-muted-foreground">Dette tar vanligvis noen sekunder</p>
+            <p className="text-lg text-gray-300 mb-4">Dette kan ta noen sekunder…</p>
+
+            {transcriptionElapsed > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-gray-400">{transcriptionElapsed}s</p>
+                {transcriptionElapsed > 10 && (
+                  <p className="text-sm text-yellow-400 animate-pulse">Tar litt lenger tid enn vanlig…</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Saving Overlay */}
       {voiceStage === "saving" && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50">
           <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
             <div className="animate-spin h-16 w-16 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-white">Lagrer…</h2>
@@ -598,7 +609,7 @@ export function DashboardContent({
 
       {/* Success Overlay */}
       {voiceStage === "done" && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50">
           <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
             <div className="h-16 w-16 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
               <svg className="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
