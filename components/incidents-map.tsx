@@ -35,7 +35,7 @@ const TYPE_LABELS = {
 }
 
 export function IncidentsMap({ contract }: IncidentsMapProps) {
-  console.log("[INCIDENT MAP] Component mounted")
+  console.log("[INCIDENT MAP] Component mounted - START OF FUNCTION")
 
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
@@ -134,11 +134,15 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
     }
   }, [incidents, isPreview])
 
+  console.log("[INCIDENT MAP] Rendering with state:", { loading, error, incidentsCount: incidents.length, isPreview })
+
   if (loading) {
+    console.log("[INCIDENT MAP] Returning loading state")
     return (
       <Card className="bg-gray-900 border-gray-800">
         <CardContent className="pt-6">
           <div className="flex items-center justify-center h-64">
+            <div className="text-white">Laster hendelser...</div>
             <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
           </div>
         </CardContent>
@@ -147,6 +151,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
   }
 
   if (error) {
+    console.log("[INCIDENT MAP] Returning error state:", error)
     return (
       <Card className="bg-gray-900 border-gray-800">
         <CardContent className="pt-6">
@@ -160,6 +165,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
   }
 
   if (incidents.length === 0) {
+    console.log("[INCIDENT MAP] Returning no incidents state")
     return (
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>
@@ -171,6 +177,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
   }
 
   if (isPreview) {
+    console.log("[INCIDENT MAP] Returning preview placeholder")
     return (
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>
@@ -208,6 +215,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
     )
   }
 
+  console.log("[INCIDENT MAP] Returning map component")
   return (
     <Card className="bg-gray-900 border-gray-800">
       <CardHeader>

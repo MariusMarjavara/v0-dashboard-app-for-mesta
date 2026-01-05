@@ -4,8 +4,19 @@ import Link from "next/link"
 import { IncidentsMap } from "@/components/incidents-map"
 
 export default function IncidentsPage() {
+  console.log("[INCIDENTS PAGE] Rendering incidents page")
+
   return (
     <div className="container mx-auto p-4 space-y-4">
+      {/* Fullscreen test to verify routing works */}
+      <div className="fixed inset-0 bg-red-600 text-white text-3xl flex items-center justify-center z-50">
+        <div className="text-center">
+          <div className="text-5xl font-bold mb-4">✅ INCIDENTS PAGE FUNGERER</div>
+          <div className="text-2xl">URL: /incidents</div>
+          <div className="text-xl mt-4">Hvis du ser dette, er routing OK</div>
+        </div>
+      </div>
+
       <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white">
         <ArrowLeft className="h-4 w-4" />
         Tilbake til dashboard
@@ -20,7 +31,10 @@ export default function IncidentsPage() {
         </CardHeader>
       </Card>
 
-      <IncidentsMap />
+      <div className="border-2 border-yellow-500 p-2">
+        <div className="text-yellow-500 text-sm mb-2">MAP SHOULD BE BELOW THIS LINE:</div>
+        <IncidentsMap />
+      </div>
 
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>

@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
       registration_type: classification.registration_type,
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
+      lat: metadata.gps?.lat || null,
+      lon: metadata.gps?.lon || null,
       data: {
         vakttlf: metadata.extracted?.vakttlf || false,
         oppringt_av: metadata.extracted?.oppringt_av || metadata.extracted?.ringer || null,
