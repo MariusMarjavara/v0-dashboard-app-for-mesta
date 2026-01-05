@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { IncidentsMap } from "@/components/incidents-map"
 
 export default function IncidentsPage() {
   return (
@@ -14,10 +15,12 @@ export default function IncidentsPage() {
         <CardHeader>
           <CardTitle className="text-2xl text-white">Hendelseskart</CardTitle>
           <CardDescription className="text-gray-400">
-            Hendelseskart-funksjonen er midlertidig deaktivert. Talenotater fortsetter å fungere normalt.
+            Oversikt over registreringer med GPS-data. Kartet er kun til visning.
           </CardDescription>
         </CardHeader>
       </Card>
+
+      <IncidentsMap />
 
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>
