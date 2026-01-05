@@ -12,7 +12,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { ArrowLeft, Camera, X, MapPin, Clock, ImageIcon } from "lucide-react"
-import { getVegreferanse } from "@/lib/road-reference-service"
 
 interface UtbedringFormProps {
   userName: string
@@ -120,15 +119,20 @@ export function UtbedringForm({
     }
   }, [])
 
-  const handleCameraCapture = (file: File) => {
+  const handleCameraCapture = (file: File, gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null) => {
     const dataUrl = URL.createObjectURL(file)
+
+    const imageLocation = gpsMetadata ? { lat: gpsMetadata.lat, lon: gpsMetadata.lon, accuracy: null } : currentLocation
+
+    const roadRef = gpsMetadata?.vegreferanse || ""
+
     const newImage: CapturedImage = {
       id: crypto.randomUUID(),
       file,
       dataUrl,
       timestamp: new Date().toISOString(),
-      location: currentLocation,
-      roadReference: "",
+      location: imageLocation,
+      roadReference: roadRef,
     }
     setCurrentImages((prev) => [...prev, newImage])
     setShowCamera(false)
@@ -141,7 +145,16 @@ export function UtbedringForm({
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          const roadRef = await getVegreferanse(position.coords.latitude, position.coords.longitude)
+          let roadRef = ""
+          try {
+            const res = await fetch(
+              `/api/nvdb/vegreferanse?lat=${position.coords.latitude}&lon=${position.coords.longitude}`,
+            )
+            const data = await res.json()
+            roadRef = data.vegreferanse || ""
+          } catch {
+            roadRef = ""
+          }
 
           const newImage: CapturedImage = {
             id: crypto.randomUUID(),
@@ -153,7 +166,7 @@ export function UtbedringForm({
               lon: position.coords.longitude,
               accuracy: position.coords.accuracy,
             },
-            roadReference: roadRef || "",
+            roadReference: roadRef,
           }
           setCurrentImages((prev) => [...prev, newImage])
         },

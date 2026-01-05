@@ -7,12 +7,11 @@ import { REGISTRATION_TYPES } from "@/lib/types"
 
 const OPTIONS = [
   { type: REGISTRATION_TYPES.FRIKSJON, label: "Friksjonsmåling" },
-  { type: REGISTRATION_TYPES.VINTERARBEID, label: "Vinterarbeid / tiltak" },
   { type: REGISTRATION_TYPES.VOICE_MEMO, label: "Vakttlf / loggbok" },
+  { type: REGISTRATION_TYPES.ARBEIDSDOK, label: "Manuelt arbeid" },
   { type: REGISTRATION_TYPES.MASKIN, label: "Maskinregistrering" },
   { type: REGISTRATION_TYPES.UTBEDRING, label: "Utbedring / reparasjon" },
   { type: REGISTRATION_TYPES.INNKJOP, label: "Innkjøp / materiale" },
-  { type: REGISTRATION_TYPES.ARBEIDSDOK, label: "Notat / annet" },
 ]
 
 interface Props {

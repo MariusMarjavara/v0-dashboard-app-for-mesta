@@ -21,22 +21,16 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const finalTranscriptRef = useRef<string>("")
   const interimTranscriptRef = useRef<string>("")
 
-  console.log("[v0] 🎛️ VoiceButton render, carMode:", carMode, "disabled:", disabled)
-
   const startRecording = async () => {
-    console.log("[v0] 🎤 startRecording called")
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      console.log("[v0] 🎤 Got media stream")
 
       const mimeType = "audio/webm;codecs=opus"
       const supported = MediaRecorder.isTypeSupported(mimeType)
-      console.log("[v0] 🎤 Codec support for", mimeType, ":", supported)
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: supported ? mimeType : undefined,
       })
-      console.log("[v0] 🎤 MediaRecorder created, state:", mediaRecorder.state)
 
       mediaRef.current = mediaRecorder
       chunks.current = []
@@ -44,21 +38,16 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       interimTranscriptRef.current = ""
 
       mediaRecorder.ondataavailable = (e) => {
-        console.log("[v0] 🎤 Data available, size:", e.data.size)
         chunks.current.push(e.data)
       }
 
       mediaRecorder.onstop = () => {
-        console.log("[v0] 🎧 Recording stopped, chunks:", chunks.current.length)
         const blob = new Blob(chunks.current, { type: supported ? mimeType : "audio/webm" })
-        console.log("[v0] 🎧 Audio blob created, size:", blob.size, "type:", blob.type)
-        console.log("[v0] 📦 Calling onFinished with blob and finalTranscript:", finalTranscriptRef.current)
-        onFinished(blob, finalTranscriptRef.current)
+        onFinished(blob, finalTranscriptRef.current.trim())
         stream.getTracks().forEach((track) => track.stop())
       }
 
       mediaRecorder.start()
-      console.log("[v0] 🎤 MediaRecorder.start() called, state:", mediaRecorder.state)
 
       if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -70,44 +59,32 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
         recognition.onresult = (event: any) => {
           if (systemIsSpeaking()) {
-            console.log("[v0] 🔇 Ignoring recognition while system is speaking")
             return
           }
 
-          let finalText = ""
           let interimText = ""
 
-          for (let i = 0; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript
-            if (event.results[i].isFinal) {
-              finalText += transcript + " "
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i]
+            const text = result[0].transcript.trim()
+
+            if (result.isFinal) {
+              finalTranscriptRef.current += " " + text
             } else {
-              interimText += transcript
+              interimText += " " + text
             }
           }
 
-          if (finalText) {
-            finalTranscriptRef.current += finalText
-            console.log("[v0] ✅ Final transcript updated:", finalTranscriptRef.current)
-          }
-
-          const displayText = finalTranscriptRef.current + interimText
+          const displayText = (finalTranscriptRef.current + " " + interimText).trim()
           setLiveTranscript(displayText)
-          interimTranscriptRef.current = displayText
-          console.log("[v0] 🗣️ Live transcript display:", displayText)
         }
 
         recognition.onerror = (event: any) => {
-          console.error("[v0] ❌ SpeechRecognition error:", event.error)
-        }
-
-        recognition.onend = () => {
-          console.log("[v0] 🏁 SpeechRecognition ended, final transcript:", finalTranscriptRef.current)
+          console.error("SpeechRecognition error:", event.error)
         }
 
         recognition.start()
         recognitionRef.current = recognition
-        console.log("[v0] 🗣️ SpeechRecognition started")
       }
 
       speak("Jeg hører deg")
@@ -115,18 +92,15 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       if (navigator.vibrate) navigator.vibrate(100)
       setRecording(true)
     } catch (error) {
-      console.error("[v0] ❌ Recording error:", error)
+      console.error("Recording error:", error)
       if (navigator.vibrate) navigator.vibrate([200, 100, 200])
     }
   }
 
   const stopRecording = () => {
-    console.log("[v0] 🛑 stopRecording called")
-
     if (recognitionRef.current) {
       recognitionRef.current.stop()
       recognitionRef.current = null
-      console.log("[v0] 🗣️ SpeechRecognition stopped")
     }
 
     setTimeout(() => {
@@ -141,7 +115,6 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   }
 
   const handleClick = () => {
-    console.log("[v0] 🖱️ Click, disabled:", disabled, "recording:", recording)
     if (disabled) return
 
     if (recording) {

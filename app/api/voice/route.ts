@@ -59,15 +59,16 @@ export async function POST(req: NextRequest) {
       contract_area: metadata.contractArea,
       contract_nummer: metadata.contractNummer,
       data: {
-        // Voice flow answers
-        type: metadata.type, // 'loggbok' or 'notat'
-        vakttlf: metadata.vakttlf, // boolean
-        ringer: metadata.ringer, // string
-        hendelse: metadata.hendelse, // string
-        tiltak: metadata.tiltak, // string
-        transcript, // Combined transcript from voice flow
+        vakttlf: metadata.extracted?.vakttlf || false,
+        oppringt_av: metadata.extracted?.oppringt_av || metadata.extracted?.ringer || null,
+        hendelse: metadata.extracted?.hendelse || null,
+        sted: metadata.extracted?.sted || null,
+        strekning: metadata.extracted?.strekning || null,
+        tiltak: metadata.extracted?.tiltak || null,
+        operativ_status: status,
+        kommentar: metadata.extracted?.kommentar || null,
+        transcript,
         timestamp: metadata.timestamp,
-        operationalStatus: status,
         // Classification metadata
         classification: {
           type: classification.registration_type,
@@ -76,8 +77,8 @@ export async function POST(req: NextRequest) {
           keywords: classification.keywords,
         },
         // Source tracking
-        source: "voice" as const, // Indicates this was voice-collected
-        confidence: metadata.confidence || {}, // Voice recognition confidence scores
+        source: "voice" as const,
+        confidence: metadata.confidence || {},
       },
     }
 

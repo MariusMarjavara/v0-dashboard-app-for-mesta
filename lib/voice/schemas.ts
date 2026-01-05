@@ -26,13 +26,19 @@ export interface RegistrationSchema {
 
 export const VAKTLOGG_SCHEMA: RegistrationSchema = {
   type: REGISTRATION_TYPES.VOICE_MEMO,
-  sheetName: "Vaktlogg",
+  sheetName: "Vakttlf / loggbok",
   description: "Loggføring av vakttlf og hendelser",
   fields: [
     {
+      name: "vakttlf",
+      type: "boolean",
+      required: false,
+      placeholder: "Er dette en vakttlf?",
+    },
+    {
       name: "oppringt_av",
       type: "select",
-      required: true,
+      required: false,
       options: ["Trafikant", "Politiet", "Vegtrafikksentral", "AMK/Brann", "Annet"],
       placeholder: "Hvem ringte?",
     },
@@ -47,14 +53,21 @@ export const VAKTLOGG_SCHEMA: RegistrationSchema = {
       name: "sted",
       type: "text",
       required: true,
-      placeholder: "Hvor skjedde det?",
+      placeholder: "Sted eller strekning",
     },
     {
       name: "tiltak",
       type: "select",
-      required: true,
+      required: false, // Changed to optional, but strongly encouraged for operational decisions
       options: ["Brøyting", "Strøing", "Befaring", "Ingen tiltak", "Eskalert"],
       placeholder: "Hvilket tiltak?",
+    },
+    {
+      name: "operativ_status",
+      type: "select",
+      required: false,
+      options: ["Utført strøing", "Utført brøyting", "Under utføring", "Ingen tiltak"],
+      placeholder: "Status på tiltak (hvis relevant)",
     },
     {
       name: "kommentar",
@@ -109,16 +122,16 @@ export const FRIKSJON_SCHEMA: RegistrationSchema = {
   ],
 }
 
-export const VINTERARBEID_SCHEMA: RegistrationSchema = {
-  type: REGISTRATION_TYPES.VINTERARBEID,
-  sheetName: "Vinterarbeid",
-  description: "Manuelt vinterarbeid (ikke fra kjørelogg)",
+export const MANUELT_ARBEID_SCHEMA: RegistrationSchema = {
+  type: REGISTRATION_TYPES.ARBEIDSDOK,
+  sheetName: "Manuelt arbeid",
+  description: "Manuelt utført arbeid (brøyting, strøing, skilt)",
   fields: [
     {
       name: "type_arbeid",
       type: "select",
       required: true,
-      options: ["Brøytestikksetting", "Skiltkosting", "Rydding av leskur", "Annet"],
+      options: ["Brøytestikksetting", "Skiltkosting", "Rydding av leskur", "Brøyting", "Strøing", "Annet"],
       placeholder: "Type arbeid",
     },
     {
@@ -142,14 +155,73 @@ export const VINTERARBEID_SCHEMA: RegistrationSchema = {
   ],
 }
 
+export const MASKIN_SCHEMA: RegistrationSchema = {
+  type: REGISTRATION_TYPES.MASKIN,
+  sheetName: "Maskinoppfølging",
+  description: "Maskin- og utstyrsoppfølging",
+  fields: [
+    {
+      name: "maskin_type",
+      type: "select",
+      required: true,
+      options: ["Traktor", "Fres", "Bil", "Annet"],
+      placeholder: "Type maskin",
+    },
+    {
+      name: "arbeid",
+      type: "text",
+      required: true,
+      placeholder: "Hva ble gjort?",
+    },
+    {
+      name: "beskrivelse",
+      type: "text",
+      required: false,
+      placeholder: "Detaljer",
+    },
+  ],
+}
+
+export const INNKJOP_SCHEMA: RegistrationSchema = {
+  type: REGISTRATION_TYPES.INNKJOP,
+  sheetName: "Innkjøp",
+  description: "Innkjøp og materiell",
+  fields: [
+    {
+      name: "hva",
+      type: "text",
+      required: true,
+      placeholder: "Hva ble kjøpt?",
+    },
+    {
+      name: "antall",
+      type: "number",
+      required: false,
+      placeholder: "Antall (stk)",
+    },
+    {
+      name: "hvor",
+      type: "text",
+      required: false,
+      placeholder: "Hvor kjøpt?",
+    },
+    {
+      name: "beskrivelse",
+      type: "text",
+      required: false,
+      placeholder: "Detaljer",
+    },
+  ],
+}
+
 export const SCHEMA_REGISTRY: Record<RegistrationType, RegistrationSchema | null> = {
   [REGISTRATION_TYPES.VOICE_MEMO]: VAKTLOGG_SCHEMA,
   [REGISTRATION_TYPES.FRIKSJON]: FRIKSJON_SCHEMA,
-  [REGISTRATION_TYPES.VINTERARBEID]: VINTERARBEID_SCHEMA,
-  [REGISTRATION_TYPES.MASKIN]: null, // Not yet schema-based
+  [REGISTRATION_TYPES.VINTERARBEID]: null,
+  [REGISTRATION_TYPES.MASKIN]: MASKIN_SCHEMA,
+  [REGISTRATION_TYPES.INNKJOP]: INNKJOP_SCHEMA,
   [REGISTRATION_TYPES.UTBEDRING]: null,
-  [REGISTRATION_TYPES.INNKJOP]: null,
-  [REGISTRATION_TYPES.ARBEIDSDOK]: null,
+  [REGISTRATION_TYPES.ARBEIDSDOK]: MANUELT_ARBEID_SCHEMA,
   [REGISTRATION_TYPES.AVVIK_RUH]: null,
 }
 

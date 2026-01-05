@@ -18,7 +18,6 @@ import { WeatherProvider, TopExposedAreas, RemainingWeatherCards } from "@/compo
 import { ExportRegistrationsButton } from "@/components/export-registrations-button"
 import { VoiceMemo } from "@/components/voice-memo"
 import { VoiceButton } from "@/components/voice-button"
-import { VoiceFlow } from "@/components/voice-flow"
 import { OperationalStatusBanner } from "@/components/operational-status-banner"
 import { CarModeToggle } from "@/components/car-mode-toggle"
 import { useCarMode } from "@/components/car-mode-provider"
@@ -31,8 +30,8 @@ import { getRegistrationCardsForUser } from "@/lib/registration-cards"
 import { BottomNav } from "@/components/bottom-nav"
 import { VoiceConfirm } from "@/components/voice-confirm"
 import type { RegistrationType } from "@/types"
-import type { VoiceInterpretation } from "@/types/voice"
-import { withTimeout } from "@/lib/voice/timeout"
+import type { VoiceSession } from "@/lib/voice/session"
+import { interpretVoiceMemo } from "@/lib/voice/classify"
 import { speak } from "@/lib/voice/tts"
 import { cleanTranscript } from "@/lib/voice/cleanTranscript"
 
@@ -72,19 +71,11 @@ export function DashboardContent({
 
   const contractNummer = contractAreaId ? Number.parseInt(contractAreaId) : null
 
-  const [voiceFlowActive, setVoiceFlowActive] = useState(false)
-  const [voiceTranscript, setVoiceTranscript] = useState("")
-  const [voiceAudioBlob, setVoiceAudioBlob] = useState<Blob | null>(null)
-  const [voiceConfirmData, setVoiceConfirmData] = useState<Record<string, string> | null>(null)
-  const [activeNavSection, setActiveNavSection] = useState<"status" | "voice" | "camera" | "log">("status")
+  const [voiceSession, setVoiceSession] = useState<VoiceSession | null>(null)
+  const [voiceStage, setVoiceStage] = useState<"idle" | "transcribing" | "confirm" | "saving" | "done">("idle")
   const { carMode } = useCarMode()
 
   const [isDesktop, setIsDesktop] = useState(false)
-  const [voiceStage, setVoiceStage] = useState<"idle" | "recording" | "transcribing" | "confirm" | "saving" | "done">(
-    "idle",
-  )
-  const [transcriptionStartTime, setTranscriptionStartTime] = useState<number | null>(null)
-  const [transcriptionElapsed, setTranscriptionElapsed] = useState(0)
 
   useEffect(() => {
     const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
@@ -125,18 +116,6 @@ export function DashboardContent({
 
     fetchContractType()
   }, [contractNummer])
-
-  useEffect(() => {
-    if (voiceStage === "transcribing" && transcriptionStartTime) {
-      const interval = setInterval(() => {
-        setTranscriptionElapsed(Math.floor((Date.now() - transcriptionStartTime) / 1000))
-      }, 1000)
-
-      return () => clearInterval(interval)
-    } else {
-      setTranscriptionElapsed(0)
-    }
-  }, [voiceStage, transcriptionStartTime])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -207,119 +186,58 @@ export function DashboardContent({
   const registrationCards = getRegistrationCardsForUser(userType)
   const filteredApps = getAppsForUser(userType, contractType || undefined)
 
-  const handleVoiceFinished = async (blob: Blob, liveTranscript: string) => {
-    console.log("[v0] 🎤 Voice recording finished, starting transcription")
-    console.time("[v0] transcribe")
+  const handleVoiceFinished = async (audioBlob: Blob, liveTranscript: string) => {
+    console.log("[v0] 🎙️ Voice finished, blob size:", audioBlob.size, "live transcript:", liveTranscript)
 
-    setVoiceAudioBlob(blob)
     setVoiceStage("transcribing")
-    setTranscriptionStartTime(Date.now())
 
-    const fallbackTranscript = cleanTranscript(liveTranscript || "")
+    const cleanedTranscript = cleanTranscript(liveTranscript)
+    console.log("[v0] 🧹 Cleaned transcript:", cleanedTranscript)
 
-    try {
-      const formData = new FormData()
-      formData.append("audio", blob, "voice-memo.webm")
+    const interpretation = interpretVoiceMemo(cleanedTranscript)
+    console.log("[v0] 🧠 Interpretation:", interpretation)
 
-      const response = await withTimeout(
-        fetch("/api/voice/transcribe", {
-          method: "POST",
-          body: formData,
-        }),
-        15000,
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-
-        if (data.fallbackRequired || !data.transcript) {
-          console.log("[v0] 🔄 API key not available or transcription failed, using live transcript")
-          throw new Error("Fallback required")
-        }
-
-        const transcript = cleanTranscript(data.text || data.transcript || "")
-
-        console.timeEnd("[v0] transcribe")
-
-        const finalTranscript = transcript.trim().length > 0 ? transcript : fallbackTranscript
-
-        setVoiceTranscript(finalTranscript)
-        console.log("[v0] 📝 Transcription complete:", finalTranscript)
-
-        const interpretation = interpretVoiceMemo(finalTranscript)
-        console.log("[v0] 🧠 Interpretation:", interpretation)
-
-        speak("Jeg er ferdig med å tolke. Se gjennom før lagring.")
-
-        setVoiceConfirmData({
-          transcript: finalTranscript,
-          interpretation: JSON.stringify(interpretation),
-        })
-
-        setVoiceStage("confirm")
-        setTranscriptionStartTime(null)
-
-        if (interpretation.confidence >= 0.7) {
-          console.log("[v0] ✅ High confidence interpretation")
-        } else {
-          console.log("[v0] ⚠️ Low confidence interpretation")
-        }
-      } else {
-        throw new Error("Transcription API returned error")
-      }
-    } catch (error) {
-      console.error("[v0] ❌ Transcription error:", error)
-      console.timeEnd("[v0] transcribe")
-
-      setVoiceTranscript(fallbackTranscript)
-
-      const interpretation = interpretVoiceMemo(fallbackTranscript)
-
-      speak("Jeg er ferdig med å tolke. Se gjennom før lagring.")
-
-      setVoiceConfirmData({
-        transcript: fallbackTranscript,
-        interpretation: JSON.stringify(interpretation),
-      })
-
-      setVoiceStage("confirm")
-      setTranscriptionStartTime(null)
+    // Create voice session with both transcript and interpretation
+    const session: VoiceSession = {
+      audio: audioBlob,
+      transcript: cleanedTranscript,
+      interpretation: {
+        type: interpretation.registration_type,
+        confidence: interpretation.confidence,
+        extracted: interpretation.extracted,
+        summary: interpretation.summary,
+        schema: interpretation.schema,
+        fieldConfidence: interpretation.fieldConfidence,
+        missingRequired: interpretation.missingRequired,
+      },
     }
-  }
 
-  const interpretVoiceMemo = (transcript: string): VoiceInterpretation => {
-    return {
-      type: "loggbok",
-      confidence: 0.8,
-      overridden: false,
-      extracted: {},
-      summary: "Summary of the voice memo",
-      transcript: transcript,
-    }
+    setVoiceSession(session)
+    setVoiceStage("confirm")
+
+    // TTS readback
+    speak("Jeg er ferdig med å tolke. Se gjennom før lagring")
   }
 
   const handleVoiceConfirm = async (classification: {
     type: RegistrationType
     confidence: number
     overridden: boolean
-    interpretation: VoiceInterpretation
+    interpretation: any
   }) => {
-    if (!voiceAudioBlob || !voiceConfirmData) return
+    if (!voiceSession) return
 
     setVoiceStage("saving")
 
-    const finalTranscript =
-      classification.interpretation.transcript || voiceConfirmData.transcript || voiceTranscript || "Voice memo"
+    const finalTranscript = voiceSession.transcript || "Voice memo"
 
     if (!finalTranscript || finalTranscript.trim().length < 3) {
-      console.error("[v0] ❌ Transcript missing or invalid", voiceConfirmData)
+      console.error("[v0] ❌ Transcript missing or invalid")
       toast.error("Kunne ikke registrere tale – prøv igjen")
       if (navigator.vibrate) navigator.vibrate([200, 100, 200])
       setVoiceStage("idle")
       return
     }
-
-    console.log("[v0] 📤 Submitting with classification:", classification)
 
     const metadata = {
       type: classification.type,
@@ -329,25 +247,23 @@ export function DashboardContent({
       contractNummer,
       timestamp: new Date().toISOString(),
       transcript: finalTranscript,
-      extracted: classification.interpretation.extracted,
+      extracted: voiceSession.interpretation.extracted,
       classification: {
         registration_type: classification.type,
         confidence: classification.confidence,
         overridden: classification.overridden,
-        summary: classification.interpretation.summary,
+        summary: voiceSession.interpretation.summary,
       },
       feedback: classification.overridden
         ? {
-            predicted_type: classification.interpretation.registration_type,
+            predicted_type: voiceSession.interpretation.type,
             corrected_type: classification.type,
           }
         : null,
     }
 
-    console.log("[v0] 📦 Metadata being sent:", metadata)
-
     const formData = new FormData()
-    formData.append("audio", voiceAudioBlob, "voice-memo.webm")
+    formData.append("audio", voiceSession.audio, "voice-memo.webm")
     formData.append("metadata", JSON.stringify(metadata))
 
     try {
@@ -364,9 +280,7 @@ export function DashboardContent({
 
         setTimeout(() => {
           setVoiceStage("idle")
-          setVoiceConfirmData(null)
-          setVoiceTranscript("")
-          setVoiceAudioBlob(null)
+          setVoiceSession(null)
         }, 2000)
       } else {
         const errorData = await response.json()
@@ -382,54 +296,17 @@ export function DashboardContent({
     }
   }
 
-  const handleVoiceEdit = () => {
-    console.log("[v0] ✏️ User wants to edit, opening guided flow")
-    setVoiceFlowActive(true)
-    setVoiceConfirmData(null)
-  }
-
   const handleVoiceCancel = () => {
+    setVoiceSession(null)
     setVoiceStage("idle")
-    setVoiceConfirmData(null)
-    setVoiceTranscript("")
-    setVoiceAudioBlob(null)
-  }
-
-  const handleVoiceFlowCancel = () => {
-    setVoiceFlowActive(false)
-    setVoiceTranscript("")
-    setVoiceAudioBlob(null)
-  }
-
-  const handleNavigation = (section: "status" | "voice" | "camera" | "log") => {
-    setActiveNavSection(section)
-
-    if (section === "voice" && !voiceFlowActive) {
-      if (navigator.vibrate) navigator.vibrate(50)
-    }
-  }
-
-  const buildVoiceSummary = (data: Record<string, string>) => {
-    const parts = []
-    if (data.type === "ja") parts.push("Loggbok:")
-    if (data.vakttlf === "ja") parts.push("• Vaktelefon")
-    if (data.caller) parts.push(`• ${data.caller}`)
-    if (data.reason) parts.push(`• ${data.reason}`)
-    if (data.action) parts.push(`• ${data.action}`)
-    return parts.join("\n")
+    speak("Avbrutt")
   }
 
   const effectiveName = userName || manualName || ""
   const isMestaUser = userType === "mesta"
 
-  const handleVoiceFlowComplete = async (data: Record<string, string>) => {
-    console.log("[v0] ✅ VoiceFlow complete, data:", data)
-    setVoiceConfirmData(data)
-    setVoiceFlowActive(false)
-  }
-
   return (
-    <div className="container mx-auto p-4 pb-20 bg-gradient-to-br from-[#0b1f3a] via-[#1a2332] to-[#0b1f3a] text-white">
+    <div className="flex-1 overflow-y-auto pb-20">
       {/* Header */}
       <header className="border-b border-border bg-mesta-navy-light sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -554,7 +431,7 @@ export function DashboardContent({
       </main>
 
       {/* VoiceMemo Floating Button */}
-      {!activeForm && !showSuccess && !needsName && !voiceFlowActive && !voiceConfirmData && (
+      {!activeForm && !showSuccess && !needsName && voiceStage === "idle" && !voiceSession && (
         <>
           {carMode ? (
             <VoiceButton onFinished={handleVoiceFinished} disabled={false} />
@@ -564,35 +441,31 @@ export function DashboardContent({
         </>
       )}
 
-      {voiceFlowActive && (
-        <VoiceFlow transcript={voiceTranscript} onComplete={handleVoiceFlowComplete} onCancel={handleVoiceFlowCancel} />
-      )}
-
       {/* Voice Confirmation Screen */}
-      {voiceStage === "confirm" && voiceConfirmData && (
+      {voiceStage === "confirm" && voiceSession && (
         <VoiceConfirm
-          transcript={voiceConfirmData.transcript || voiceTranscript}
+          transcript={voiceSession.transcript}
+          interpretation={{
+            registration_type: voiceSession.interpretation.type,
+            confidence: voiceSession.interpretation.confidence,
+            extracted: voiceSession.interpretation.extracted,
+            summary: voiceSession.interpretation.summary,
+            schema: voiceSession.interpretation.schema,
+            fieldConfidence: voiceSession.interpretation.fieldConfidence,
+            missingRequired: voiceSession.interpretation.missingRequired,
+          }}
           onConfirm={handleVoiceConfirm}
-          onEdit={handleVoiceEdit}
           onCancel={handleVoiceCancel}
         />
       )}
 
+      {/* Transcribing Overlay */}
       {voiceStage === "transcribing" && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
           <div className="text-center px-6">
             <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-white mb-2">Tolker det du sa…</h2>
-            <p className="text-lg text-gray-300 mb-4">Dette kan ta noen sekunder…</p>
-
-            {transcriptionElapsed > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm text-gray-400">{transcriptionElapsed}s</p>
-                {transcriptionElapsed > 10 && (
-                  <p className="text-sm text-yellow-400 animate-pulse">Tar litt lenger tid enn vanlig…</p>
-                )}
-              </div>
-            )}
+            <p className="text-sm text-gray-400">Ett øyeblikk...</p>
           </div>
         </div>
       )}
@@ -623,7 +496,7 @@ export function DashboardContent({
 
       {/* Bottom Navigation for Car Mode */}
       {carMode && !activeForm && !showSuccess && !needsName && (
-        <BottomNav onNavigate={handleNavigation} activeSection={activeNavSection} />
+        <BottomNav onNavigate={() => {}} activeSection={"" as any} />
       )}
     </div>
   )

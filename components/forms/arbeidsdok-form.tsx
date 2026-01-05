@@ -1,8 +1,6 @@
 "use client"
 
 import React from "react"
-
-import { getVegreferanse } from "@/lib/road-reference-service"
 import { useState, useRef, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,28 +64,28 @@ export function ArbeidsdokForm({
   const { toast } = useToast()
 
   const handleCameraCapture = useCallback(
-    async (file: File) => {
+    async (file: File, gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null) => {
       const previewUrl = URL.createObjectURL(file)
-      const currentLocation = location || { lat: null, lon: null, accuracy: null }
 
-      let roadRef = ""
-      if (currentLocation.lat && currentLocation.lon) {
-        roadRef = (await getVegreferanse(currentLocation.lat, currentLocation.lon)) || ""
-      }
+      const imageLocation = gpsMetadata
+        ? { lat: gpsMetadata.lat, lon: gpsMetadata.lon, accuracy: null }
+        : { lat: null, lon: null, accuracy: null }
+
+      const roadRef = gpsMetadata?.vegreferanse || ""
 
       const newImage: CapturedImage = {
         id: crypto.randomUUID(),
         file,
         previewUrl,
         timestamp: new Date().toISOString(),
-        location: currentLocation,
+        location: imageLocation,
         roadReference: roadRef,
       }
 
       setImages((prev) => [...prev, newImage])
       setShowCamera(false)
     },
-    [location],
+    [],
   )
 
   const handleFileUpload = useCallback(
@@ -96,11 +94,18 @@ export function ArbeidsdokForm({
       if (!file) return
 
       const previewUrl = URL.createObjectURL(file)
+
       const currentLocation = location || { lat: null, lon: null, accuracy: null }
 
       let roadRef = ""
       if (currentLocation.lat && currentLocation.lon) {
-        roadRef = (await getVegreferanse(currentLocation.lat, currentLocation.lon)) || ""
+        try {
+          const res = await fetch(`/api/nvdb/vegreferanse?lat=${currentLocation.lat}&lon=${currentLocation.lon}`)
+          const data = await res.json()
+          roadRef = data.vegreferanse || ""
+        } catch {
+          roadRef = ""
+        }
       }
 
       const newImage: CapturedImage = {

@@ -6,7 +6,7 @@ import { Camera, X } from "lucide-react"
 import { formatDateTime, getCurrentPosition } from "@/lib/utils/formatting"
 
 interface CameraCaptureProps {
-  onCapture: (file: File) => void
+  onCapture: (file: File, metadata: { lat: number; lon: number; vegreferanse: string } | null) => void
   onCancel: () => void
 }
 
@@ -85,12 +85,20 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
 
     const dateText = formatDateTime()
 
-    let locationText = "Laster posisjon..."
+    let gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null = null
+    let locationText = "GPS utilgjengelig"
+
     try {
       const pos = await getCurrentPosition()
-      const res = await fetch(`/api/nvdb/vegreferanse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`)
+      const lat = pos.coords.latitude
+      const lon = pos.coords.longitude
+
+      const res = await fetch(`/api/nvdb/vegreferanse?lat=${lat}&lon=${lon}`)
       const data = await res.json()
-      locationText = data.vegreferanse
+      const vegreferanse = data.vegreferanse || "Ikke på veg"
+
+      locationText = vegreferanse
+      gpsMetadata = { lat, lon, vegreferanse }
     } catch {
       locationText = "GPS utilgjengelig"
     }
@@ -114,7 +122,7 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
           const file = new File([blob], `bilde-${Date.now()}.jpg`, {
             type: "image/jpeg",
           })
-          onCapture(file)
+          onCapture(file, gpsMetadata)
         }
       },
       "image/jpeg",

@@ -110,26 +110,23 @@ export async function GET(request: Request) {
         })
         break
       case "voice_memo":
-        const voiceType = reg.data.type === "loggbok" ? "Loggbok" : "Notat"
-        const confidence = reg.data.confidence || {}
-        const avgConfidence = Object.values(confidence).length
-          ? (
-              (Object.values(confidence).reduce((a: any, b: any) => a + b, 0) / Object.values(confidence).length) *
-              100
-            ).toFixed(0) + "%"
-          : "-"
+        const vakttlfValue = reg.data.vakttlf === true ? "Ja" : reg.data.vakttlf === false ? "Nei" : "-"
+        const oppringtAv = reg.data.oppringt_av || reg.data.ringer || "-"
+        const hendelse = reg.data.hendelse || "-"
+        const stedOrStrekning = reg.data.strekning || reg.data.sted || "-"
+        const tiltak = reg.data.tiltak || "-"
+        const operativStatus = reg.data.operativ_status || "-"
 
         exportData.voice_memo.push({
           ...baseData,
-          Type: `Voice ${voiceType}`,
-          Vakttlf: reg.data.vakttlf ? "Ja" : "Nei",
-          Ringer: reg.data.ringer || "-",
-          Hendelse: reg.data.hendelse || "-",
-          Tiltak: reg.data.tiltak || "-",
+          Vakttlf: vakttlfValue,
+          "Oppringt av": oppringtAv,
+          Hendelse: hendelse,
+          "Sted/Strekning": stedOrStrekning,
+          Tiltak: tiltak,
+          "Operativ status": operativStatus,
+          Kommentar: reg.data.kommentar || "-",
           Transkripsjon: reg.data.transcript || "-",
-          Kontrakt: reg.contract_area || "-",
-          "Operativ status": reg.data.operationalStatus || "-",
-          "Tale-kvalitet": avgConfidence, // Average voice recognition confidence
         })
         break
     }
@@ -169,7 +166,7 @@ export async function GET(request: Request) {
 
   if (exportData.voice_memo.length > 0) {
     const ws = XLSX.utils.json_to_sheet(exportData.voice_memo)
-    XLSX.utils.book_append_sheet(workbook, ws, "Voice Memo")
+    XLSX.utils.book_append_sheet(workbook, ws, "Vakttlf og loggbok")
   }
 
   const excelBuffer = XLSX.write(workbook, {
