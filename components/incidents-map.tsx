@@ -44,6 +44,16 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
   const [error, setError] = useState<string | null>(null)
   const [isPreview, setIsPreview] = useState(false)
 
+  const [enabledTypes, setEnabledTypes] = useState<Record<string, boolean>>({
+    vakttlf: true,
+    friksjon: true,
+    tiltak: true,
+    voice_notat: true,
+    annet: true,
+  })
+
+  const [timeWindow, setTimeWindow] = useState<"24h" | "7d" | "all">("all")
+
   useEffect(() => {
     const preview =
       typeof window !== "undefined" &&
@@ -152,6 +162,88 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
     }
   }, [incidents, isPreview])
 
+  const filteredIncidents = incidents.filter((incident) => {
+    // Filter by type
+    if (!enabledTypes[incident.type]) return false
+
+    // Filter by time window
+    if (timeWindow !== "all") {
+      const ageHours = (Date.now() - new Date(incident.timestamp).getTime()) / (1000 * 60 * 60)
+      if (timeWindow === "24h" && ageHours > 24) return false
+      if (timeWindow === "7d" && ageHours > 168) return false
+    }
+
+    return true
+  })
+
+  useEffect(() => {
+    if (isPreview || !mapContainer.current || filteredIncidents.length === 0 || map.current) return
+
+    console.log("[INCIDENT MAP] Initializing map with", filteredIncidents.length, "filtered incidents")
+
+    import("maplibre-gl")
+      .then(({ default: maplibregl }) => {
+        if (!mapContainer.current) return
+
+        map.current = new maplibregl.Map({
+          container: mapContainer.current,
+          style: "https://demotiles.maplibre.org/style.json",
+          center: [10.7522, 59.9139],
+          zoom: 5,
+        })
+
+        filteredIncidents.forEach((incident) => {
+          const el = document.createElement("div")
+          el.className = "marker"
+          el.style.backgroundColor = TYPE_COLORS[incident.type] || TYPE_COLORS.annet
+          el.style.width = "12px"
+          el.style.height = "12px"
+          el.style.borderRadius = "50%"
+          el.style.border = "2px solid white"
+          el.style.cursor = "pointer"
+
+          const ageHours = (Date.now() - new Date(incident.timestamp).getTime()) / (1000 * 60 * 60)
+          let opacity = 1.0
+          if (ageHours > 24 && ageHours <= 168) {
+            opacity = 0.6
+          } else if (ageHours > 168) {
+            opacity = 0.3
+          }
+          el.style.opacity = opacity.toString()
+
+          const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
+            <div style="padding: 8px; font-size: 12px;">
+              <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
+              ${incident.vegreferanse || "Ukjent lokasjon"}<br/>
+              <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
+            </div>
+          `)
+
+          new maplibregl.Marker(el).setLngLat([incident.lon, incident.lat]).setPopup(popup).addTo(map.current)
+        })
+
+        if (filteredIncidents.length === 1) {
+          map.current.setCenter([filteredIncidents[0].lon, filteredIncidents[0].lat])
+          map.current.setZoom(12)
+        } else {
+          const bounds = new maplibregl.LngLatBounds()
+          filteredIncidents.forEach((inc) => bounds.extend([inc.lon, inc.lat]))
+          map.current.fitBounds(bounds, { padding: 50 })
+        }
+      })
+      .catch((err) => {
+        console.error("[INCIDENT MAP] MapLibre load error:", err)
+        setError("Kartbibliotek kunne ikke lastes")
+      })
+
+    return () => {
+      if (map.current) {
+        map.current.remove()
+        map.current = null
+      }
+    }
+  }, [filteredIncidents, isPreview])
+
   console.log("[INCIDENT MAP] Rendering with state:", { loading, error, incidentsCount: incidents.length, isPreview })
 
   if (loading) {
@@ -204,16 +296,72 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
             Hendelseskart
           </CardTitle>
           <CardDescription className="text-gray-400">
-            Viser {incidents.length} registrering{incidents.length !== 1 ? "er" : ""} med GPS-data
+            Viser {filteredIncidents.length} registrering{filteredIncidents.length !== 1 ? "er" : ""} med GPS-data
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="space-y-3 mb-4">
+            {/* Time window filter */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setTimeWindow("24h")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  timeWindow === "24h" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                24 timer
+              </button>
+              <button
+                onClick={() => setTimeWindow("7d")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  timeWindow === "7d" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                7 dager
+              </button>
+              <button
+                onClick={() => setTimeWindow("all")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  timeWindow === "all" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                Alle
+              </button>
+            </div>
+
+            {/* Type filters */}
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(TYPE_LABELS).map(([type, label]) => {
+                const isEnabled = enabledTypes[type]
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setEnabledTypes((prev) => ({ ...prev, [type]: !prev[type] }))}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                      isEnabled ? "bg-gray-800 text-white" : "bg-gray-900 text-gray-500 opacity-50"
+                    }`}
+                  >
+                    <div
+                      className="h-3 w-3 rounded-full border-2 border-white"
+                      style={{
+                        backgroundColor: isEnabled ? TYPE_COLORS[type as keyof typeof TYPE_COLORS] : "transparent",
+                      }}
+                    />
+                    <span>{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div className="h-[500px] w-full rounded-xl bg-gray-800/50 border-2 border-dashed border-gray-700 flex flex-col items-center justify-center gap-4 text-gray-400">
             <MapPin className="h-12 w-12" />
             <div className="text-center">
               <div className="font-medium">Hendelseskart vises i produksjon</div>
               <div className="text-sm mt-1">v0 preview støtter ikke kartvisning</div>
-              <div className="text-xs mt-2">Fant {incidents.length} hendelser med GPS</div>
+              <div className="text-xs mt-2">
+                Fant {filteredIncidents.length} av {incidents.length} hendelser med GPS
+              </div>
             </div>
           </div>
 
@@ -233,7 +381,6 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
     )
   }
 
-  console.log("[INCIDENT MAP] Returning map component")
   return (
     <Card className="bg-gray-900 border-gray-800">
       <CardHeader>
@@ -242,10 +389,65 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
           Hendelseskart
         </CardTitle>
         <CardDescription className="text-gray-400">
-          Viser {incidents.length} registrering{incidents.length !== 1 ? "er" : ""} med GPS-data
+          Viser {filteredIncidents.length} av {incidents.length} registrering
+          {incidents.length !== 1 ? "er" : ""} med GPS-data
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="space-y-3 mb-4">
+          {/* Time window filter */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setTimeWindow("24h")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                timeWindow === "24h" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              }`}
+            >
+              24 timer
+            </button>
+            <button
+              onClick={() => setTimeWindow("7d")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                timeWindow === "7d" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              }`}
+            >
+              7 dager
+            </button>
+            <button
+              onClick={() => setTimeWindow("all")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                timeWindow === "all" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              }`}
+            >
+              Alle
+            </button>
+          </div>
+
+          {/* Type filters - large touch targets for gloves */}
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(TYPE_LABELS).map(([type, label]) => {
+              const isEnabled = enabledTypes[type]
+              return (
+                <button
+                  key={type}
+                  onClick={() => setEnabledTypes((prev) => ({ ...prev, [type]: !prev[type] }))}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all min-h-[44px] ${
+                    isEnabled ? "bg-gray-800 text-white" : "bg-gray-900 text-gray-500 opacity-50"
+                  }`}
+                >
+                  <div
+                    className="h-3 w-3 rounded-full border-2 border-white"
+                    style={{
+                      backgroundColor: isEnabled ? TYPE_COLORS[type as keyof typeof TYPE_COLORS] : "transparent",
+                    }}
+                  />
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div ref={mapContainer} className="w-full h-[500px] rounded-xl" style={{ height: "500px" }} />
 
         <div className="mt-4 flex flex-wrap gap-3">

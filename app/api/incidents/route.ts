@@ -12,14 +12,14 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("registrations")
-      .select("id, registration_type, lat, lon, vegreferanse, created_at, data")
+      .select("id, registration_type, lat, lon, vegreferanse, created_at, data, contract_area")
       .not("lat", "is", null)
       .not("lon", "is", null)
       .order("created_at", { ascending: false })
       .limit(500)
 
-    if (contract) {
-      query = query.ilike("contract_area", `${contract}%`)
+    if (contract && contract !== "all") {
+      query = query.eq("contract_area", contract)
     }
 
     const { data, error } = await query
@@ -62,6 +62,7 @@ export async function GET(request: Request) {
         vegreferanse: row.vegreferanse || null,
         timestamp: row.created_at,
         confidence,
+        contract: row.contract_area || null,
       })
     }
 

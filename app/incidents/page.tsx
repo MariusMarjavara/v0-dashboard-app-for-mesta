@@ -1,9 +1,31 @@
+"use client"
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { IncidentsMap } from "@/components/incidents-map"
+import { useState, useEffect } from "react"
 
 export default function IncidentsPage() {
+  const [selectedContract, setSelectedContract] = useState<string>("all")
+  const [availableContracts, setAvailableContracts] = useState<string[]>([])
+
+  useEffect(() => {
+    async function fetchContracts() {
+      try {
+        const response = await fetch("/api/incidents")
+        if (response.ok) {
+          const incidents = await response.json()
+          const contracts = [...new Set(incidents.map((i: any) => i.contract).filter(Boolean))] as string[]
+          setAvailableContracts(contracts.sort())
+        }
+      } catch (err) {
+        console.error("Failed to fetch contracts:", err)
+      }
+    }
+    fetchContracts()
+  }, [])
+
   return (
     <div className="container mx-auto p-4 space-y-4">
       <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white">
@@ -18,12 +40,28 @@ export default function IncidentsPage() {
             Oversikt over registreringer med GPS-data. Kartet er kun til visning.
           </CardDescription>
         </CardHeader>
+        {availableContracts.length > 0 && (
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-300">Kontrakt:</label>
+              <select
+                value={selectedContract}
+                onChange={(e) => setSelectedContract(e.target.value)}
+                className="px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+              >
+                <option value="all">Alle kontrakter</option>
+                {availableContracts.map((contract) => (
+                  <option key={contract} value={contract}>
+                    {contract}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
-      <div className="border-2 border-yellow-500 p-2">
-        <div className="text-yellow-500 text-sm mb-2">MAP COMPONENT:</div>
-        <IncidentsMap />
-      </div>
+      <IncidentsMap contract={selectedContract === "all" ? undefined : selectedContract} />
 
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>
