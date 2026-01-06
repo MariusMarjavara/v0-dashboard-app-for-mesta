@@ -20,6 +20,7 @@ function isIOSBrowser(): boolean {
 export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const [recording, setRecording] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState("")
+  const [debugInfo, setDebugInfo] = useState<string>("")
   const { carMode = true } = useCarMode()
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunks = useRef<Blob[]>([])
@@ -30,10 +31,20 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+
+      console.log("[ANDROID DEBUG] getUserMedia successful, stream tracks:", stream.getAudioTracks().length)
 
       const mimeType = "audio/webm;codecs=opus"
       const supported = MediaRecorder.isTypeSupported(mimeType)
+
+      console.log("[ANDROID DEBUG] MIME type support:", { mimeType, supported })
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: supported ? mimeType : undefined,
@@ -45,13 +56,28 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       interimTranscriptRef.current = ""
 
       mediaRecorder.ondataavailable = (e) => {
+        console.log("[ANDROID DEBUG] chunk received - size:", e.data.size, "type:", e.data.type)
         if (e.data.size > 0) {
           chunks.current.push(e.data)
+          setDebugInfo(`chunk: ${e.data.size} bytes`)
+        } else {
+          setDebugInfo("chunk: 0 bytes")
         }
       }
 
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks.current, { type: supported ? mimeType : "audio/webm" })
+
+        setDebugInfo(`chunks: ${chunks.current.length}, blob: ${blob.size} bytes`)
+
+        console.log(
+          "[ANDROID DEBUG] final blob - size:",
+          blob.size,
+          "type:",
+          blob.type,
+          "chunks count:",
+          chunks.current.length,
+        )
 
         if (isIOS.current) {
           console.log("[v0] 📱 iOS detected - routing audio to backend STT")
@@ -60,11 +86,13 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
           formData.append("audio", blob, "voice-memo.webm")
 
           try {
+            console.log("[ANDROID DEBUG] sending to backend /api/voice/transcribe")
             const response = await fetch("/api/voice/transcribe", {
               method: "POST",
               body: formData,
             })
 
+            console.log("[ANDROID DEBUG] backend response status:", response.status)
             const data = await response.json()
             const backendTranscript = data?.transcript || ""
             console.log("[v0] ✅ Backend transcription result:", backendTranscript)
@@ -72,17 +100,17 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
             onFinished(blob, backendTranscript)
           } catch (error) {
             console.error("[v0] ❌ Backend transcription failed:", error)
-            // Fallback: use empty transcript if backend fails
             onFinished(blob, "")
           }
         } else {
-          // Android/Desktop: Use live transcript from SpeechRecognition
+          console.log("[ANDROID DEBUG] non-iOS path - using live transcript:", finalTranscriptRef.current.trim())
           onFinished(blob, finalTranscriptRef.current.trim())
         }
 
         stream.getTracks().forEach((track) => track.stop())
       }
 
+      console.log("[ANDROID DEBUG] starting MediaRecorder with 250ms timeslice")
       mediaRecorder.start(250)
 
       if (!isIOS.current && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
@@ -146,12 +174,14 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       if (navigator.vibrate) navigator.vibrate(100)
       setRecording(true)
     } catch (error) {
-      console.error("Recording error:", error)
+      console.error("[ANDROID DEBUG] Recording error:", error)
       if (navigator.vibrate) navigator.vibrate([200, 100, 200])
     }
   }
 
   const stopRecording = () => {
+    console.log("[ANDROID DEBUG] stopRecording called")
+
     if (recognitionRef.current) {
       recognitionRef.current.stop()
       recognitionRef.current = null
@@ -183,6 +213,10 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   return (
     <>
       {recording && <ActiveRecordingOverlay transcript={liveTranscript} onStop={stopRecording} />}
+
+      {recording && (
+        <div className="fixed bottom-40 right-6 z-50 bg-black/70 text-white text-xs p-2 rounded">{debugInfo}</div>
+      )}
 
       <button
         onClick={handleClick}
