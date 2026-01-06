@@ -85,9 +85,11 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
       .then(({ default: maplibregl }) => {
         if (!mapContainer.current) return
 
+        // NOTE: This is a safe, free default style. No API keys needed.
+        // In production, you may want to use a custom style or paid provider.
         map.current = new maplibregl.Map({
           container: mapContainer.current,
-          style: "https://api.maptiler.com/maps/streets/style.json?key=get_your_own_key",
+          style: "https://demotiles.maplibre.org/style.json",
           center: [10.7522, 59.9139],
           zoom: 5,
         })
@@ -102,24 +104,40 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
           el.style.border = "2px solid white"
           el.style.cursor = "pointer"
 
+          // 0-24h: opacity 1.0
+          // 1-7 days: opacity 0.6
+          // 7+ days: opacity 0.3
           const ageHours = (Date.now() - new Date(incident.timestamp).getTime()) / (1000 * 60 * 60)
-          const opacity = Math.max(0.3, 1 - ageHours / 24)
+          let opacity = 1.0
+          if (ageHours > 24 && ageHours <= 168) {
+            // 1-7 days
+            opacity = 0.6
+          } else if (ageHours > 168) {
+            // 7+ days
+            opacity = 0.3
+          }
           el.style.opacity = opacity.toString()
 
           const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
-          <div style="padding: 8px; font-size: 12px;">
-            <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
-            ${incident.vegreferanse || "Ukjent lokasjon"}<br/>
-            <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
-          </div>
-        `)
+            <div style="padding: 8px; font-size: 12px;">
+              <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
+              ${incident.vegreferanse || "Ukjent lokasjon"}<br/>
+              <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
+            </div>
+          `)
 
           new maplibregl.Marker(el).setLngLat([incident.lon, incident.lat]).setPopup(popup).addTo(map.current)
         })
 
-        const bounds = new maplibregl.LngLatBounds()
-        incidents.forEach((inc) => bounds.extend([inc.lon, inc.lat]))
-        map.current.fitBounds(bounds, { padding: 50 })
+        // If only one point, use default zoom level instead of max zoom
+        if (incidents.length === 1) {
+          map.current.setCenter([incidents[0].lon, incidents[0].lat])
+          map.current.setZoom(12) // Reasonable city-level zoom
+        } else {
+          const bounds = new maplibregl.LngLatBounds()
+          incidents.forEach((inc) => bounds.extend([inc.lon, inc.lat]))
+          map.current.fitBounds(bounds, { padding: 50 })
+        }
       })
       .catch((err) => {
         console.error("[INCIDENT MAP] MapLibre load error:", err)
