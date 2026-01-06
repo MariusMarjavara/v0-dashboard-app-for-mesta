@@ -129,7 +129,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
 
         map.current = new maplibregl.Map({
           container: mapContainer.current,
-          style: "https://demotiles.maplibre.org/style.json",
+          style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
           center: [10.7522, 59.9139],
           zoom: 5,
         })
@@ -300,7 +300,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
 
         map.current = new maplibregl.Map({
           container: mapContainer.current,
-          style: "https://demotiles.maplibre.org/style.json",
+          style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
           center: [10.7522, 59.9139],
           zoom: 5,
         })
