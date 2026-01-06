@@ -54,6 +54,16 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
 
   const [timeWindow, setTimeWindow] = useState<"24h" | "7d" | "all">("all")
 
+  const [lookupState, setLookupState] = useState<{
+    incidentId: string | null
+    loading: boolean
+    result: { status: string; vegreferanse?: string; avstand?: number } | null
+  }>({
+    incidentId: null,
+    loading: false,
+    result: null,
+  })
+
   useEffect(() => {
     const preview =
       typeof window !== "undefined" &&
@@ -86,6 +96,28 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
     fetchIncidents()
   }, [contract])
 
+  const lookupVegreferanse = async (incident: Incident) => {
+    setLookupState({ incidentId: incident.id, loading: true, result: null })
+
+    try {
+      const response = await fetch("/api/vegreferanse/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: incident.lat, lon: incident.lon }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setLookupState({ incidentId: incident.id, loading: false, result: data })
+      } else {
+        setLookupState({ incidentId: incident.id, loading: false, result: { status: "not_found" } })
+      }
+    } catch (error) {
+      console.error("[VEGREFERANSE LOOKUP] Error:", error)
+      setLookupState({ incidentId: incident.id, loading: false, result: { status: "not_found" } })
+    }
+  }
+
   useEffect(() => {
     if (isPreview || !mapContainer.current || incidents.length === 0 || map.current) return
 
@@ -95,8 +127,6 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
       .then(({ default: maplibregl }) => {
         if (!mapContainer.current) return
 
-        // NOTE: This is a safe, free default style. No API keys needed.
-        // In production, you may want to use a custom style or paid provider.
         map.current = new maplibregl.Map({
           container: mapContainer.current,
           style: "https://demotiles.maplibre.org/style.json",
@@ -114,35 +144,118 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
           el.style.border = "2px solid white"
           el.style.cursor = "pointer"
 
-          // 0-24h: opacity 1.0
-          // 1-7 days: opacity 0.6
-          // 7+ days: opacity 0.3
           const ageHours = (Date.now() - new Date(incident.timestamp).getTime()) / (1000 * 60 * 60)
           let opacity = 1.0
           if (ageHours > 24 && ageHours <= 168) {
-            // 1-7 days
             opacity = 0.6
           } else if (ageHours > 168) {
-            // 7+ days
             opacity = 0.3
           }
           el.style.opacity = opacity.toString()
 
-          const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
-            <div style="padding: 8px; font-size: 12px;">
-              <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
-              ${incident.vegreferanse || "Ukjent lokasjon"}<br/>
-              <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
-            </div>
-          `)
+          const popupContent = document.createElement("div")
+          popupContent.style.padding = "12px"
+          popupContent.style.fontSize = "12px"
+          popupContent.style.minWidth = "200px"
+
+          const renderPopupContent = () => {
+            const isLoading = lookupState.incidentId === incident.id && lookupState.loading
+            const result = lookupState.incidentId === incident.id ? lookupState.result : null
+
+            let html = `
+              <div style="margin-bottom: 8px;">
+                <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
+                <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
+              </div>
+              <div style="margin-bottom: 8px; padding: 8px; background: #f3f4f6; border-radius: 4px;">
+                <div style="font-weight: 500; margin-bottom: 4px;">📍 GPS-punkt</div>
+                <div style="font-size: 11px; color: #666;">${incident.lat.toFixed(5)}, ${incident.lon.toFixed(5)}</div>
+              </div>
+            `
+
+            if (incident.vegreferanse) {
+              html += `
+                <div style="padding: 8px; background: #e0f2fe; border-radius: 4px; margin-bottom: 8px;">
+                  <div style="font-size: 11px; color: #0369a1;">Eksisterende vegreferanse</div>
+                  <div style="font-weight: 500;">${incident.vegreferanse}</div>
+                </div>
+              `
+            }
+
+            if (isLoading) {
+              html += `
+                <div style="padding: 8px; text-align: center;">
+                  <div style="color: #666;">Henter vegreferanse…</div>
+                </div>
+              `
+            } else if (result) {
+              if (result.status === "found") {
+                html += `
+                  <div style="padding: 8px; background: #dcfce7; border-radius: 4px; border: 1px solid #86efac;">
+                    <div style="font-weight: 500; color: #166534;">${result.vegreferanse}</div>
+                    <div style="font-size: 10px; color: #166534; margin-top: 4px;">
+                      (utledet fra GPS${result.avstand ? ` – ${result.avstand}m` : ""})
+                    </div>
+                  </div>
+                `
+              } else if (result.status === "estimated") {
+                html += `
+                  <div style="padding: 8px; background: #fef3c7; border-radius: 4px; border: 1px solid #fbbf24;">
+                    <div style="font-weight: 500; color: #92400e;">${result.vegreferanse}</div>
+                    <div style="font-size: 10px; color: #92400e; margin-top: 4px;">
+                      (estimat – ${result.avstand}m)
+                    </div>
+                  </div>
+                `
+              } else {
+                html += `
+                  <div style="padding: 8px; background: #fee2e2; border-radius: 4px; border: 1px solid #fca5a5;">
+                    <div style="font-size: 11px; color: #991b1b;">Ingen vegreferanse funnet</div>
+                    <div style="font-size: 10px; color: #991b1b; margin-top: 4px;">(GPS er lagret)</div>
+                  </div>
+                `
+              }
+            } else {
+              html += `
+                <button
+                  id="lookup-btn-${incident.id}"
+                  style="
+                    width: 100%;
+                    padding: 8px 12px;
+                    background: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-weight: 500;
+                  "
+                >
+                  Finn vegreferanse
+                </button>
+              `
+            }
+
+            popupContent.innerHTML = html
+
+            const button = popupContent.querySelector(`#lookup-btn-${incident.id}`)
+            if (button) {
+              button.addEventListener("click", () => lookupVegreferanse(incident))
+            }
+          }
+
+          renderPopupContent()
+
+          const popup = new maplibregl.Popup({ offset: 25 }).setDOMContent(popupContent)
 
           new maplibregl.Marker(el).setLngLat([incident.lon, incident.lat]).setPopup(popup).addTo(map.current)
+
+          popup.on("open", renderPopupContent)
         })
 
-        // If only one point, use default zoom level instead of max zoom
         if (incidents.length === 1) {
           map.current.setCenter([incidents[0].lon, incidents[0].lat])
-          map.current.setZoom(12) // Reasonable city-level zoom
+          map.current.setZoom(12)
         } else {
           const bounds = new maplibregl.LngLatBounds()
           incidents.forEach((inc) => bounds.extend([inc.lon, inc.lat]))
@@ -160,7 +273,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
         map.current = null
       }
     }
-  }, [incidents, isPreview])
+  }, [incidents, isPreview, lookupState])
 
   const filteredIncidents = incidents.filter((incident) => {
     // Filter by type
@@ -211,15 +324,104 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
           }
           el.style.opacity = opacity.toString()
 
-          const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
-            <div style="padding: 8px; font-size: 12px;">
-              <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
-              ${incident.vegreferanse || "Ukjent lokasjon"}<br/>
-              <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
-            </div>
-          `)
+          const popupContent = document.createElement("div")
+          popupContent.style.padding = "12px"
+          popupContent.style.fontSize = "12px"
+          popupContent.style.minWidth = "200px"
+
+          const renderPopupContent = () => {
+            const isLoading = lookupState.incidentId === incident.id && lookupState.loading
+            const result = lookupState.incidentId === incident.id ? lookupState.result : null
+
+            let html = `
+              <div style="margin-bottom: 8px;">
+                <strong>${TYPE_LABELS[incident.type] || "Hendelse"}</strong><br/>
+                <span style="color: #666;">${new Date(incident.timestamp).toLocaleString("nb-NO")}</span>
+              </div>
+              <div style="margin-bottom: 8px; padding: 8px; background: #f3f4f6; border-radius: 4px;">
+                <div style="font-weight: 500; margin-bottom: 4px;">📍 GPS-punkt</div>
+                <div style="font-size: 11px; color: #666;">${incident.lat.toFixed(5)}, ${incident.lon.toFixed(5)}</div>
+              </div>
+            `
+
+            if (incident.vegreferanse) {
+              html += `
+                <div style="padding: 8px; background: #e0f2fe; border-radius: 4px; margin-bottom: 8px;">
+                  <div style="font-size: 11px; color: #0369a1;">Eksisterende vegreferanse</div>
+                  <div style="font-weight: 500;">${incident.vegreferanse}</div>
+                </div>
+              `
+            }
+
+            if (isLoading) {
+              html += `
+                <div style="padding: 8px; text-align: center;">
+                  <div style="color: #666;">Henter vegreferanse…</div>
+                </div>
+              `
+            } else if (result) {
+              if (result.status === "found") {
+                html += `
+                  <div style="padding: 8px; background: #dcfce7; border-radius: 4px; border: 1px solid #86efac;">
+                    <div style="font-weight: 500; color: #166534;">${result.vegreferanse}</div>
+                    <div style="font-size: 10px; color: #166534; margin-top: 4px;">
+                      (utledet fra GPS${result.avstand ? ` – ${result.avstand}m` : ""})
+                    </div>
+                  </div>
+                `
+              } else if (result.status === "estimated") {
+                html += `
+                  <div style="padding: 8px; background: #fef3c7; border-radius: 4px; border: 1px solid #fbbf24;">
+                    <div style="font-weight: 500; color: #92400e;">${result.vegreferanse}</div>
+                    <div style="font-size: 10px; color: #92400e; margin-top: 4px;">
+                      (estimat – ${result.avstand}m)
+                    </div>
+                  </div>
+                `
+              } else {
+                html += `
+                  <div style="padding: 8px; background: #fee2e2; border-radius: 4px; border: 1px solid #fca5a5;">
+                    <div style="font-size: 11px; color: #991b1b;">Ingen vegreferanse funnet</div>
+                    <div style="font-size: 10px; color: #991b1b; margin-top: 4px;">(GPS er lagret)</div>
+                  </div>
+                `
+              }
+            } else {
+              html += `
+                <button
+                  id="lookup-btn-${incident.id}"
+                  style="
+                    width: 100%;
+                    padding: 8px 12px;
+                    background: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-weight: 500;
+                  "
+                >
+                  Finn vegreferanse
+                </button>
+              `
+            }
+
+            popupContent.innerHTML = html
+
+            const button = popupContent.querySelector(`#lookup-btn-${incident.id}`)
+            if (button) {
+              button.addEventListener("click", () => lookupVegreferanse(incident))
+            }
+          }
+
+          renderPopupContent()
+
+          const popup = new maplibregl.Popup({ offset: 25 }).setDOMContent(popupContent)
 
           new maplibregl.Marker(el).setLngLat([incident.lon, incident.lat]).setPopup(popup).addTo(map.current)
+
+          popup.on("open", renderPopupContent)
         })
 
         if (filteredIncidents.length === 1) {
@@ -242,7 +444,7 @@ export function IncidentsMap({ contract }: IncidentsMapProps) {
         map.current = null
       }
     }
-  }, [filteredIncidents, isPreview])
+  }, [filteredIncidents, isPreview, lookupState])
 
   console.log("[INCIDENT MAP] Rendering with state:", { loading, error, incidentsCount: incidents.length, isPreview })
 

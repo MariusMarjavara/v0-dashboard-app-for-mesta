@@ -11,6 +11,12 @@ interface VoiceButtonProps {
   disabled?: boolean
 }
 
+function isIOSBrowser(): boolean {
+  if (typeof window === "undefined") return false
+  const ua = window.navigator.userAgent.toLowerCase()
+  return /iphone|ipad|ipod/.test(ua) || (ua.includes("mac") && "ontouchend" in document)
+}
+
 export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const [recording, setRecording] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState("")
@@ -20,6 +26,7 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const recognitionRef = useRef<any>(null)
   const finalTranscriptRef = useRef<string>("")
   const interimTranscriptRef = useRef<string>("")
+  const isIOS = useRef(isIOSBrowser())
 
   const startRecording = async () => {
     try {
@@ -40,19 +47,45 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunks.current.push(e.data)
-          console.log("[v0] 📊 Audio chunk received, size:", e.data.size, "total chunks:", chunks.current.length)
         }
       }
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks.current, { type: supported ? mimeType : "audio/webm" })
-        onFinished(blob, finalTranscriptRef.current.trim())
+
+        if (isIOS.current) {
+          console.log("[v0] 📱 iOS detected - routing audio to backend STT")
+
+          const formData = new FormData()
+          formData.append("audio", blob, "voice-memo.webm")
+
+          try {
+            const response = await fetch("/api/voice/transcribe", {
+              method: "POST",
+              body: formData,
+            })
+
+            const data = await response.json()
+            const backendTranscript = data?.transcript || ""
+            console.log("[v0] ✅ Backend transcription result:", backendTranscript)
+
+            onFinished(blob, backendTranscript)
+          } catch (error) {
+            console.error("[v0] ❌ Backend transcription failed:", error)
+            // Fallback: use empty transcript if backend fails
+            onFinished(blob, "")
+          }
+        } else {
+          // Android/Desktop: Use live transcript from SpeechRecognition
+          onFinished(blob, finalTranscriptRef.current.trim())
+        }
+
         stream.getTracks().forEach((track) => track.stop())
       }
 
       mediaRecorder.start(250)
 
-      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      if (!isIOS.current && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
         const recognition = new SpeechRecognition()
@@ -100,9 +133,15 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
         recognition.start()
         recognitionRef.current = recognition
+        console.log("[v0] 🎙️ SpeechRecognition started (non-iOS)")
+      } else if (isIOS.current) {
+        console.log("[v0] 📱 iOS detected - SpeechRecognition disabled, using backend STT")
+        setLiveTranscript("Lytter... (transkriberes etter opptak)")
       }
 
-      speak("Jeg hører deg")
+      if (!isIOS.current) {
+        speak("Jeg hører deg")
+      }
 
       if (navigator.vibrate) navigator.vibrate(100)
       setRecording(true)
@@ -123,7 +162,9 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       setLiveTranscript("")
     }, 200)
 
-    speak("Takk")
+    if (!isIOS.current) {
+      speak("Takk")
+    }
 
     if (navigator.vibrate) navigator.vibrate([80, 80])
     setRecording(false)
