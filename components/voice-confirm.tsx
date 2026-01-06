@@ -6,7 +6,7 @@ import { ClassificationSelector } from "@/components/classification-selector"
 import type { RegistrationType } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { speak } from "@/lib/voice/tts"
-import { FileSpreadsheet, AlertTriangle, Check } from "lucide-react"
+import { FileSpreadsheet, Check } from "lucide-react"
 
 interface VoiceConfirmProps {
   transcript: string
@@ -150,6 +150,28 @@ export function VoiceConfirm({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 text-white flex flex-col justify-center items-center p-6 overflow-y-auto">
+      <div className="bg-green-900/20 border border-green-600/30 rounded-xl p-4 mb-4 max-w-md w-full">
+        <h3 className="text-sm font-semibold text-green-400 mb-2">Systemet foreslår:</h3>
+        <div className="space-y-1">
+          {currentInterpretation.schema?.fields
+            .filter((field) => {
+              const value = currentInterpretation.extracted[field.name]
+              return value !== null && value !== undefined && value !== ""
+            })
+            .map((field) => {
+              const value = currentInterpretation.extracted[field.name]
+              return (
+                <div key={field.name} className="flex items-start gap-2">
+                  <span className="text-green-400">•</span>
+                  <span className="text-sm text-white">
+                    <span className="text-gray-400">{field.placeholder || field.name}:</span> {String(value)}
+                  </span>
+                </div>
+              )
+            })}
+        </div>
+      </div>
+
       <div className="flex items-center gap-2 mb-2">
         <FileSpreadsheet className="h-6 w-6 text-green-500" />
         <h2 className="text-2xl font-bold">Dette vil lagres i Excel:</h2>
@@ -167,21 +189,23 @@ export function VoiceConfirm({
               const confidence = currentInterpretation.fieldConfidence?.[field.name] || "missing"
               const isMissing = confidence === "missing"
               const isSuggested = confidence === "suggested"
+              const hasValue = value !== null && value !== undefined && value !== ""
 
               return (
                 <div key={field.name} className="border-b border-gray-700 pb-2">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-semibold text-gray-400">{field.placeholder || field.name}</span>
                     {confidence === "high" && <Check className="h-4 w-4 text-green-500" />}
-                    {isSuggested && <AlertTriangle className="h-4 w-4 text-yellow-500" title="Foreslått verdi" />}
                   </div>
-                  <div
-                    className={`text-base ${
-                      isMissing ? "text-gray-500 italic" : isSuggested ? "text-yellow-300" : "text-white font-semibold"
-                    }`}
-                  >
-                    {value !== null && value !== undefined ? String(value) : "—"}
-                    {isSuggested && <span className="text-xs text-yellow-400 ml-2">(foreslått)</span>}
+                  <div className={`text-base ${isMissing ? "text-gray-500 italic" : "text-white font-semibold"}`}>
+                    {hasValue ? (
+                      <>
+                        {String(value)}
+                        {isSuggested && <span className="text-xs text-gray-400 ml-2">(foreslått)</span>}
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </div>
                 </div>
               )
@@ -191,7 +215,7 @@ export function VoiceConfirm({
           {currentInterpretation.missingRequired.length > 0 && (
             <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded">
               <p className="text-sm text-yellow-300">
-                ⚠️ Noen felt er foreslått – kontroller ved behov. Du kan også lagre uten å endre.
+                ⚠️ Feltene er forhåndsutfylt basert på tale. Du kan lagre direkte eller justere ved behov.
               </p>
             </div>
           )}
@@ -223,12 +247,9 @@ export function VoiceConfirm({
           )}
         </div>
         {!isEditingTranscript && (
-          <div className="space-y-1">
-            <button onClick={() => setIsEditingTranscript(true)} className="text-sm text-orange-400 underline">
-              ✏️ Rediger ved behov
-            </button>
-            <p className="text-xs text-gray-500">Du kan også lagre uten å endre</p>
-          </div>
+          <button onClick={() => setIsEditingTranscript(true)} className="text-sm text-orange-400 underline">
+            ✏️ Rediger ved behov
+          </button>
         )}
       </div>
 
