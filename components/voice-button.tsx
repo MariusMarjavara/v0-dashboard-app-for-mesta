@@ -38,7 +38,10 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       interimTranscriptRef.current = ""
 
       mediaRecorder.ondataavailable = (e) => {
-        chunks.current.push(e.data)
+        if (e.data.size > 0) {
+          chunks.current.push(e.data)
+          console.log("[v0] 📊 Audio chunk received, size:", e.data.size, "total chunks:", chunks.current.length)
+        }
       }
 
       mediaRecorder.onstop = () => {
@@ -47,7 +50,7 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
         stream.getTracks().forEach((track) => track.stop())
       }
 
-      mediaRecorder.start()
+      mediaRecorder.start(250)
 
       if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -81,6 +84,18 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
         recognition.onerror = (event: any) => {
           console.error("SpeechRecognition error:", event.error)
+          if (event.error === "network" || event.error === "aborted") {
+            console.log("[v0] 🔄 Restarting SpeechRecognition after transient error")
+            setTimeout(() => {
+              if (recognitionRef.current && recording) {
+                try {
+                  recognitionRef.current.start()
+                } catch (e) {
+                  console.error("[v0] ❌ Could not restart recognition:", e)
+                }
+              }
+            }, 500)
+          }
         }
 
         recognition.start()
