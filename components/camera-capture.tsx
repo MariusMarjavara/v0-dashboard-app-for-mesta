@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Camera, X } from "lucide-react"
-import { formatDateTime, getCurrentPosition } from "@/lib/utils/formatting"
+import { formatDateTime } from "@/lib/utils/formatting"
+import { getGpsSnapshot } from "@/lib/gps-snapshot"
 
 interface CameraCaptureProps {
-  onCapture: (file: File, metadata: { lat: number; lon: number; vegreferanse: string } | null) => void
+  onCapture: (file: File, metadata: { lat: number; lon: number; vegreferanse: string }) => void
   onCancel: () => void
 }
 
@@ -80,31 +81,35 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    const gpsResult = await getGpsSnapshot()
+    if ("error" in gpsResult) {
+      // Vis feilmelding i stedet for å fortsette
+      setError(gpsResult.error.message)
+      return
+    }
+
+    const { lat, lon } = gpsResult.gps
+
     // Draw the video frame
     ctx.drawImage(video, 0, 0)
 
     const dateText = formatDateTime()
 
-    let gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null = null
+    let gpsMetadata: { lat: number; lon: number; vegreferanse: string }
     let locationText: string | null = null
 
     try {
-      const pos = await getCurrentPosition()
-      const lat = pos.coords.latitude
-      const lon = pos.coords.longitude
-
       const res = await fetch(`/api/nvdb/vegreferanse?lat=${lat}&lon=${lon}`)
       const data = await res.json()
-      const vegreferanse = data.vegreferanse || null
+      const vegreferanse = data.vegreferanse || ""
+
+      gpsMetadata = { lat, lon, vegreferanse }
 
       if (vegreferanse) {
         locationText = vegreferanse
-        gpsMetadata = { lat, lon, vegreferanse }
-      } else {
-        gpsMetadata = { lat, lon, vegreferanse: "" }
       }
     } catch {
-      locationText = "GPS utilgjengelig"
+      gpsMetadata = { lat, lon, vegreferanse: "" }
     }
 
     const hasLocationText = locationText !== null

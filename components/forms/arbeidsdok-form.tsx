@@ -13,6 +13,7 @@ import { CameraCapture } from "@/components/camera-capture"
 import { ImageCard } from "@/components/image-card"
 import { useGeolocation } from "@/hooks/use-geolocation"
 import { useToast } from "@/hooks/use-toast"
+import { getGpsSnapshot } from "@/lib/gps-snapshot"
 
 interface ArbeidsdokFormProps {
   userName: string
@@ -65,13 +66,24 @@ export function ArbeidsdokForm({
 
   const handleCameraCapture = useCallback(
     async (file: File, gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null) => {
+      if (!gpsMetadata) {
+        toast({
+          title: "GPS mangler",
+          description: "Kunne ikke ta bilde uten GPS. Prøv igjen.",
+          variant: "destructive",
+        })
+        return
+      }
+
       const previewUrl = URL.createObjectURL(file)
 
-      const imageLocation = gpsMetadata
-        ? { lat: gpsMetadata.lat, lon: gpsMetadata.lon, accuracy: null }
-        : { lat: null, lon: null, accuracy: null }
+      const imageLocation = {
+        lat: gpsMetadata.lat,
+        lon: gpsMetadata.lon,
+        accuracy: null,
+      }
 
-      const roadRef = gpsMetadata?.vegreferanse || ""
+      const roadRef = gpsMetadata.vegreferanse || ""
 
       const newImage: CapturedImage = {
         id: crypto.randomUUID(),
@@ -85,7 +97,7 @@ export function ArbeidsdokForm({
       setImages((prev) => [...prev, newImage])
       setShowCamera(false)
     },
-    [],
+    [toast],
   )
 
   const handleFileUpload = useCallback(
@@ -93,19 +105,28 @@ export function ArbeidsdokForm({
       const file = event.target.files?.[0]
       if (!file) return
 
+      const gpsResult = await getGpsSnapshot()
+      if ("error" in gpsResult) {
+        toast({
+          title: "GPS påkrevd",
+          description: gpsResult.error.message,
+          variant: "destructive",
+        })
+        event.target.value = ""
+        return
+      }
+
+      const { lat, lon, accuracy } = gpsResult.gps
+
       const previewUrl = URL.createObjectURL(file)
 
-      const currentLocation = location || { lat: null, lon: null, accuracy: null }
-
       let roadRef = ""
-      if (currentLocation.lat && currentLocation.lon) {
-        try {
-          const res = await fetch(`/api/nvdb/vegreferanse?lat=${currentLocation.lat}&lon=${currentLocation.lon}`)
-          const data = await res.json()
-          roadRef = data.vegreferanse || ""
-        } catch {
-          roadRef = ""
-        }
+      try {
+        const res = await fetch(`/api/nvdb/vegreferanse?lat=${lat}&lon=${lon}`)
+        const data = await res.json()
+        roadRef = data.vegreferanse || ""
+      } catch {
+        roadRef = ""
       }
 
       const newImage: CapturedImage = {
@@ -113,14 +134,14 @@ export function ArbeidsdokForm({
         file,
         previewUrl,
         timestamp: new Date().toISOString(),
-        location: currentLocation,
+        location: { lat, lon, accuracy },
         roadReference: roadRef,
       }
 
       setImages((prev) => [...prev, newImage])
       event.target.value = ""
     },
-    [location],
+    [toast],
   )
 
   const removeImage = useCallback((id: string) => {
@@ -162,6 +183,16 @@ export function ArbeidsdokForm({
       return
     }
 
+    const imagesWithoutGps = images.filter((img) => !img.location.lat || !img.location.lon)
+    if (imagesWithoutGps.length > 0) {
+      toast({
+        title: "GPS mangler",
+        description: `${imagesWithoutGps.length} bilde(r) mangler GPS-data. Fjern eller ta på nytt.`,
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
     const supabase = createClient()
 
@@ -182,13 +213,10 @@ export function ArbeidsdokForm({
       console.log("[v0] Uploading", images.length, "images to storage...")
       for (let i = 0; i < images.length; i++) {
         const img = images[i]
-        // Filnavn: arbeidsdok/ORDRENUMMER/DATO/ORDRENUMMER-SEQ-TIDSSTEMPEL.jpg
-        // Eksempel: arbeidsdok/204480-1200/2024-12-16/204480-1200-01-2024-12-16T14-30-45.jpg
         const seq = String(i + 1).padStart(2, "0")
         const fileName = `${orderRef}-${seq}-${timestamp}.jpg`
         const filePath = `arbeidsdok/${orderRef}/${datestamp}/${fileName}`
 
-        // Upload til storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("registrations")
           .upload(filePath, img.file, {
@@ -203,7 +231,6 @@ export function ArbeidsdokForm({
 
         console.log("[v0] Uploaded image successfully:", filePath)
 
-        // Generer signert URL for privat bucket (gyldig i 1 år)
         const { data: urlData, error: urlError } = await supabase.storage
           .from("registrations")
           .createSignedUrl(filePath, 31536000) // 1 år i sekunder

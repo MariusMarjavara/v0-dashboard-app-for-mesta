@@ -19,6 +19,7 @@ function isMobileDevice(): boolean {
 export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   const [recording, setRecording] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState("")
+  const [showConfirmation, setShowConfirmation] = useState(false)
   const { carMode = true } = useCarMode()
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunks = useRef<Blob[]>([])
@@ -58,31 +59,12 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks.current, { type: supported ? mimeType : "audio/webm" })
 
-        if (isMobile.current) {
-          console.log("[v0] 📱 Mobile detected - routing to backend STT")
-
-          const formData = new FormData()
-          formData.append("audio", blob, "voice-memo.webm")
-
-          try {
-            const response = await fetch("/api/voice/transcribe", {
-              method: "POST",
-              body: formData,
-            })
-
-            const data = await response.json()
-            const backendTranscript = data?.transcript || ""
-            console.log("[v0] ✅ Backend transcription:", backendTranscript)
-
-            onFinished(blob, backendTranscript)
-          } catch (error) {
-            console.error("[v0] ❌ Backend transcription failed:", error)
-            onFinished(blob, "")
-          }
-        } else {
-          console.log("[v0] 💻 Desktop - using live transcript")
-          onFinished(blob, finalTranscriptRef.current.trim())
-        }
+        onFinished(blob, isMobile.current ? "" : finalTranscriptRef.current.trim())
+        setShowConfirmation(true)
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+        setTimeout(() => {
+          setShowConfirmation(false)
+        }, 1500)
 
         stream.getTracks().forEach((track) => track.stop())
       }
@@ -139,10 +121,8 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
 
         recognition.start()
         recognitionRef.current = recognition
-        console.log("[v0] 🎙️ Desktop: SpeechRecognition enabled")
       } else if (isMobile.current) {
-        console.log("[v0] 📱 Mobile: SpeechRecognition disabled, backend STT after stop")
-        setLiveTranscript("Opptak pågår...")
+        setLiveTranscript("🎙️ Opptak pågår")
       }
 
       if (!isMobile.current) {
@@ -189,7 +169,18 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
   return (
     <>
       {recording && <ActiveRecordingOverlay transcript={liveTranscript} onStop={stopRecording} />}
-
+      {showConfirmation && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center pointer-events-none">
+          <div className="w-full max-w-md rounded-2xl bg-[#1a2332] p-8 text-center">
+            <div className="h-16 w-16 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
+              <svg className="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white">✅ Registrert</h2>
+          </div>
+        </div>
+      )}
       <button
         onClick={handleClick}
         disabled={disabled}
@@ -202,7 +193,6 @@ export function VoiceButton({ onFinished, disabled }: VoiceButtonProps) {
         aria-label={recording ? "Avslutt logging" : "Start logging"}
       >
         <Mic className="h-12 w-12 text-white" />
-
         <span className="text-sm font-bold text-white mt-1">{recording ? "AVSLUTT" : "START"}</span>
       </button>
     </>

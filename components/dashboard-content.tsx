@@ -34,7 +34,7 @@ import type { VoiceSession } from "@/lib/voice/session"
 import { interpretVoiceMemo } from "@/lib/voice/classify"
 import { speak } from "@/lib/voice/tts"
 import { cleanTranscript } from "@/lib/voice/cleanTranscript"
-import { getCurrentPosition } from "@/lib/utils/formatting"
+import { getGpsSnapshot } from "@/lib/gps-snapshot"
 
 interface DashboardContentProps {
   userId: string
@@ -240,18 +240,17 @@ export function DashboardContent({
       return
     }
 
-    let gpsData = null
-    try {
-      const position = await getCurrentPosition()
-      gpsData = {
-        lat: position.coords.latitude,
-        lon: position.coords.longitude,
-      }
-      console.log("[v0] 📍 GPS captured for voice memo:", gpsData)
-    } catch (error) {
-      console.log("[v0] ⚠️ GPS not available for voice memo:", error)
-      // Continue without GPS - it's optional
+    const gpsResult = await getGpsSnapshot()
+    if ("error" in gpsResult) {
+      console.error("[v0] ❌ GPS required but failed:", gpsResult.error)
+      toast.error(gpsResult.error.message)
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200])
+      setVoiceStage("idle")
+      return
     }
+
+    const gpsData = gpsResult.gps
+    console.log("[v0] 📍 GPS captured for voice memo:", gpsData)
 
     const metadata = {
       type: classification.type,

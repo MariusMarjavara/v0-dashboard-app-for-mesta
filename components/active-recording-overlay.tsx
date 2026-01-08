@@ -9,10 +9,9 @@ export function ActiveRecordingOverlay({ transcript, onStop }: ActiveRecordingOv
   return (
     <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-6">
       <div className="w-full max-w-xl rounded-2xl bg-[#1a2332] border border-red-500/40 p-8">
-        {/* Header */}
         <div className="flex items-center justify-center mb-6">
           <div className="h-4 w-4 rounded-full bg-red-600 animate-pulse mr-3" />
-          <h2 className="text-2xl font-bold text-white">Logger nå</h2>
+          <h2 className="text-2xl font-bold text-white">🎙️ Opptak pågår</h2>
         </div>
 
         {/* Live transcript */}
