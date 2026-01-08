@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 
-// In-memory cache for vegreferanse lookups (prevents repeated NVDB API calls)
 const cache = new Map<string, { vegreferanse: string; timestamp: number }>()
 const CACHE_TTL = 3600000 // 1 hour in milliseconds
 
@@ -60,11 +59,9 @@ export async function GET(req: Request) {
       }
     }
 
-    vegreferanse = vegreferanse || "Ikke på veg"
+    vegreferanse = vegreferanse || ""
 
-    if (vegreferanse !== "Ikke på veg") {
-      cache.set(cacheKey, { vegreferanse, timestamp: Date.now() })
-    }
+    cache.set(cacheKey, { vegreferanse, timestamp: Date.now() })
 
     // Clean up old cache entries (simple garbage collection)
     if (cache.size > 1000) {
@@ -78,6 +75,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ vegreferanse })
   } catch (error) {
-    return NextResponse.json({ vegreferanse: "Ikke på veg" }, { status: 200 })
+    return NextResponse.json({ vegreferanse: "" }, { status: 200 })
   }
 }

@@ -3,8 +3,9 @@
 import type React from "react"
 import { toast } from "@/components/ui/use-toast"
 import { CameraCapture } from "@/components/camera-capture"
+import { getGpsSnapshot } from "@/lib/gps-snapshot"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -101,89 +102,75 @@ export function UtbedringForm({
     }
   }
 
-  useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation({
-            lat: position.coords.latitude,
-            lon: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-          })
-        },
-        (error) => {
-          console.log("[v0] Geolocation error:", error.message)
-        },
-        { enableHighAccuracy: true },
-      )
+  const handleCameraCapture = async (
+    file: File,
+    gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null,
+  ) => {
+    if (!gpsMetadata) {
+      toast({
+        title: "GPS mangler",
+        description: "Kunne ikke ta bilde uten GPS. Prøv igjen.",
+        variant: "destructive",
+      })
+      return
     }
-  }, [])
 
-  const handleCameraCapture = (file: File, gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null) => {
     const dataUrl = URL.createObjectURL(file)
-
-    const imageLocation = gpsMetadata ? { lat: gpsMetadata.lat, lon: gpsMetadata.lon, accuracy: null } : currentLocation
-
-    const roadRef = gpsMetadata?.vegreferanse || ""
 
     const newImage: CapturedImage = {
       id: crypto.randomUUID(),
       file,
       dataUrl,
       timestamp: new Date().toISOString(),
-      location: imageLocation,
-      roadReference: roadRef,
+      location: {
+        lat: gpsMetadata.lat,
+        lon: gpsMetadata.lon,
+        accuracy: null,
+      },
+      roadReference: gpsMetadata.vegreferanse || "",
     }
     setCurrentImages((prev) => [...prev, newImage])
     setShowCamera(false)
   }
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-      const dataUrl = URL.createObjectURL(file)
+    if (!file) return
 
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          let roadRef = ""
-          try {
-            const res = await fetch(
-              `/api/nvdb/vegreferanse?lat=${position.coords.latitude}&lon=${position.coords.longitude}`,
-            )
-            const data = await res.json()
-            roadRef = data.vegreferanse || ""
-          } catch {
-            roadRef = ""
-          }
-
-          const newImage: CapturedImage = {
-            id: crypto.randomUUID(),
-            file,
-            dataUrl,
-            timestamp: new Date().toISOString(),
-            location: {
-              lat: position.coords.latitude,
-              lon: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-            },
-            roadReference: roadRef,
-          }
-          setCurrentImages((prev) => [...prev, newImage])
-        },
-        () => {
-          const newImage: CapturedImage = {
-            id: crypto.randomUUID(),
-            file,
-            dataUrl,
-            timestamp: new Date().toISOString(),
-            location: currentLocation,
-            roadReference: "",
-          }
-          setCurrentImages((prev) => [...prev, newImage])
-        },
-        { enableHighAccuracy: true, timeout: 5000 },
-      )
+    const gpsResult = await getGpsSnapshot()
+    if ("error" in gpsResult) {
+      toast({
+        title: "GPS påkrevd",
+        description: gpsResult.error.message,
+        variant: "destructive",
+      })
+      event.target.value = ""
+      return
     }
+
+    const { lat, lon, accuracy } = gpsResult.gps
+
+    const dataUrl = URL.createObjectURL(file)
+
+    let roadRef = ""
+    try {
+      const res = await fetch(`/api/nvdb/vegreferanse?lat=${lat}&lon=${lon}`)
+      const data = await res.json()
+      roadRef = data.vegreferanse || ""
+    } catch {
+      roadRef = ""
+    }
+
+    const newImage: CapturedImage = {
+      id: crypto.randomUUID(),
+      file,
+      dataUrl,
+      timestamp: new Date().toISOString(),
+      location: { lat, lon, accuracy },
+      roadReference: roadRef,
+    }
+    setCurrentImages((prev) => [...prev, newImage])
+    event.target.value = ""
   }
 
   const removeImage = (id: string) => {
@@ -224,6 +211,18 @@ export function UtbedringForm({
       toast({
         title: "Ingen data",
         description: "Du må fylle ut minst én seksjon",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const allImages = [...avvikImages, ...ruhImages, ...forbedringImages]
+    const imagesWithoutGps = allImages.filter((img) => !img.location.lat || !img.location.lon)
+
+    if (imagesWithoutGps.length > 0) {
+      toast({
+        title: "GPS mangler",
+        description: `${imagesWithoutGps.length} bilde(r) mangler GPS-data. Fjern eller ta på nytt.`,
         variant: "destructive",
       })
       return
@@ -334,12 +333,6 @@ export function UtbedringForm({
       setIsSubmitting(false)
     }
   }
-
-  useEffect(() => {
-    return () => {
-      // Cleanup logic can be added here if needed
-    }
-  }, [])
 
   const currentImages = getCurrentImages()
 

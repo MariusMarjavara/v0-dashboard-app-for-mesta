@@ -6,7 +6,8 @@ export function formatDateTime(date = new Date()): string {
     .slice(-2)} - ${pad(date.getHours())}.${pad(date.getMinutes())}.${pad(date.getSeconds())}`
 }
 
-export function getCurrentPosition(): Promise<GeolocationPosition> {
+// Function to get GPS snapshot
+export function getGpsSnapshot(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: true,
