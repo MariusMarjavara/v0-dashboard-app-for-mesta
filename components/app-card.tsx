@@ -58,21 +58,21 @@ export function AppCard({ app }: AppCardProps) {
   }
 
   return (
-    <Card className="bg-mesta-navy-light border-border transition-all hover:border-mesta-orange/50">
+    <Card className="bg-card/50 border-2 border-border transition-all shadow-[0_2px_8px_rgba(0,0,0,0.25)] hover:border-primary/60 hover:shadow-[0_4px_12px_rgba(243,112,33,0.3)] hover:scale-[1.03]">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="p-2 bg-mesta-orange/20 rounded-lg">
-            <Icon className="h-6 w-6 text-mesta-orange" />
+          <div className="p-3 bg-primary/30 rounded-lg ring-1 ring-primary/40 shadow-md">
+            <Icon className="h-7 w-7 text-primary" />
           </div>
         </div>
-        <CardTitle className="text-lg text-white mt-3">{app.name}</CardTitle>
-        <CardDescription className="text-muted-foreground">{app.description}</CardDescription>
+        <CardTitle className="text-xl font-bold text-white mt-4 leading-tight">{app.name}</CardTitle>
+        <CardDescription className="text-muted-foreground text-sm leading-snug mt-1">{app.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <Button
           onClick={handleOpenApp}
           variant="outline"
-          className="w-full border-mesta-orange text-mesta-orange hover:bg-mesta-orange hover:text-white bg-transparent touch-manipulation"
+          className="w-full border-2 border-primary text-primary hover:bg-primary hover:text-white bg-transparent touch-manipulation font-semibold h-11"
         >
           <ExternalLink className="h-4 w-4 mr-2" />
           Åpne app

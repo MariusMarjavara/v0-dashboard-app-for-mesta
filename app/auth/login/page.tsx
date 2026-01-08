@@ -71,23 +71,23 @@ export default function LoginPage() {
           backgroundImage: "url('/images/road-weather-split.jpg')",
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-b from-mesta-navy/85 via-mesta-navy/80 to-mesta-navy/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/80 to-black/90" />
       </div>
 
       <div className="relative z-10 flex flex-col items-center">
-        <MestaLogo className="mb-8" />
+        <MestaLogo className="mb-10" />
 
-        <Card className="w-full max-w-md bg-mesta-navy-light border-border">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-white">Logg inn</CardTitle>
-            <CardDescription className="text-muted-foreground">
+        <Card className="w-full max-w-md bg-card/90 backdrop-blur-md border-2 border-border shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/10">
+          <CardHeader className="text-center pb-6">
+            <CardTitle className="text-4xl font-bold text-white">Logg inn</CardTitle>
+            <CardDescription className="text-muted-foreground text-lg mt-3">
               Skriv inn din e-post og passord for å logge inn
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-white">
+                <Label htmlFor="email" className="text-white font-semibold text-base">
                   E-post
                 </Label>
                 <Input
@@ -97,11 +97,11 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-secondary border-border text-white"
+                  className="bg-secondary/80 border-2 border-border text-white placeholder:text-muted-foreground h-12 text-base"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-white">
+                <Label htmlFor="password" className="text-white font-semibold text-base">
                   Passord
                 </Label>
                 <Input
@@ -110,31 +110,35 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-secondary border-border text-white"
+                  className="bg-secondary/80 border-2 border-border text-white placeholder:text-muted-foreground h-12 text-base"
                 />
               </div>
-              <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer">
+              <label className="flex items-center gap-3 text-base text-gray-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-5 w-5 accent-mesta-orange cursor-pointer"
+                  className="h-5 w-5 accent-primary cursor-pointer"
                 />
-                <span>Forbli innlogget</span>
+                <span className="font-medium">Forbli innlogget</span>
               </label>
-              {rememberMe && <p className="text-xs text-muted-foreground">Ikke bruk dette på delte enheter</p>}
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {rememberMe && <p className="text-sm text-muted-foreground">Ikke bruk dette på delte enheter</p>}
+              {error && (
+                <p className="text-sm text-destructive font-semibold bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  {error}
+                </p>
+              )}
               <Button
                 type="submit"
-                className="w-full bg-mesta-orange hover:bg-mesta-orange-hover text-white font-semibold"
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-14 text-lg shadow-[0_4px_16px_rgba(243,112,33,0.4)] hover:shadow-[0_6px_20px_rgba(243,112,33,0.5)] transition-all"
                 disabled={isLoading}
               >
                 {isLoading ? "Logger inn..." : "Logg inn"}
               </Button>
             </form>
-            <div className="mt-6 text-center text-sm text-muted-foreground">
+            <div className="mt-6 text-center text-base text-muted-foreground">
               Har du ikke en konto?{" "}
-              <Link href="/" className="text-mesta-orange hover:underline">
+              <Link href="/" className="text-primary hover:underline font-semibold">
                 Registrer deg
               </Link>
             </div>

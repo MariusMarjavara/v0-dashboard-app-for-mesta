@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
   try {
     const res = await fetch(
-      `https://nvdbapiles-v3.atlas.vegvesen.no/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${MAX_DISTANCE}`,
+      `https://nvdbapiles.atlas.vegvesen.no/vegnett/api/v4/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${MAX_DISTANCE}`,
       {
         headers: {
           "X-Client": "mesta-drift-app",
@@ -39,11 +39,11 @@ export async function GET(req: Request) {
     }
 
     const data = await res.json()
-    let vegreferanse = data?.vegreferanse?.kortform
+    let vegreferanse = data?.[0]?.vegreferanse?.kortform
 
     if (!vegreferanse && ENABLE_FALLBACK) {
       const fallbackRes = await fetch(
-        `https://nvdbapiles-v3.atlas.vegvesen.no/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${FALLBACK_DISTANCE}`,
+        `https://nvdbapiles.atlas.vegvesen.no/vegnett/api/v4/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${FALLBACK_DISTANCE}`,
         {
           headers: {
             "X-Client": "mesta-drift-app",
@@ -54,8 +54,8 @@ export async function GET(req: Request) {
 
       if (fallbackRes.ok) {
         const fallbackData = await fallbackRes.json()
-        if (fallbackData?.vegreferanse?.kortform) {
-          vegreferanse = `~${fallbackData.vegreferanse.kortform}`
+        if (fallbackData?.[0]?.vegreferanse?.kortform) {
+          vegreferanse = `~${fallbackData[0].vegreferanse.kortform}`
         }
       }
     }

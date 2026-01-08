@@ -40,19 +40,24 @@ export const RegistrationCard = memo(function RegistrationCard({
           onClick()
         }
       }}
-      className="bg-mesta-navy-light border-border cursor-pointer transition-all 
-                 hover:border-mesta-orange hover:scale-[1.02]
-                 active:scale-[0.98]"
+      className="bg-card/60 border-2 border-border cursor-pointer transition-all shadow-[0_2px_8px_rgba(0,0,0,0.3)]
+                 hover:border-primary hover:shadow-[0_4px_16px_rgba(243,112,33,0.4)] hover:scale-[1.02] hover:bg-card/80
+                 active:scale-[0.98] active:shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
     >
-      <CardHeader className="pb-3">
-        <div className="p-3 bg-mesta-orange/20 rounded-lg w-fit">
-          <Icon className="h-8 w-8 text-mesta-orange" />
+      <CardHeader className="pb-4">
+        <div className="p-4 bg-primary/30 rounded-xl w-fit ring-2 ring-primary/40 shadow-lg">
+          <Icon className="h-10 w-10 text-primary" />
         </div>
-        <CardTitle className="text-xl text-white mt-4">{title}</CardTitle>
-        <CardDescription className="text-muted-foreground">{description}</CardDescription>
+        <CardTitle className="text-2xl font-bold text-white mt-6 leading-tight">{title}</CardTitle>
+        <CardDescription className="text-muted-foreground text-base leading-relaxed mt-2">
+          {description}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="text-mesta-orange text-sm font-medium">Klikk for å registrere →</div>
+        <div className="text-primary text-base font-bold flex items-center gap-2">
+          Klikk for å registrere
+          <span className="text-lg">→</span>
+        </div>
       </CardContent>
     </Card>
   )

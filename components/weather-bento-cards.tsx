@@ -98,8 +98,10 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
 
   return (
     <Card
-      className={`p-4 transition-all cursor-pointer hover:shadow-lg hover:scale-[1.02] ${
-        isHighlighted ? "border-2 border-mesta-orange bg-card" : "border-border bg-card"
+      className={`p-5 transition-all cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.25)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.4)] hover:scale-[1.02] ${
+        isHighlighted
+          ? "border-2 border-primary bg-card/60 ring-2 ring-primary/20"
+          : "border-2 border-border bg-card/50"
       }`}
       role="link"
       aria-label={`Åpne værvarsel for ${weather.location} på yr.no`}
@@ -107,53 +109,51 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xl font-bold leading-tight tracking-tight text-card-foreground">{weather.location}</h3>
-          <span className="text-xs text-muted-foreground">Detaljert varsel på yr.no →</span>
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-2xl font-bold leading-tight tracking-tight text-white">{weather.location}</h3>
         </div>
-        <Badge variant="outline" className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
-          {weather.typeText}
-        </Badge>
+        <div className="flex items-center gap-2 mt-2">
+          <Badge variant="outline" className="border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
+            {weather.typeText}
+          </Badge>
+          <span className="text-xs text-primary/80 font-medium">yr.no →</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
+      <div className="grid grid-cols-3 gap-3 text-center py-3">
         <div>
-          <Thermometer className="mx-auto h-4 w-4 text-blue-400" />
-          <div className="text-xs text-muted-foreground">Temp</div>
-          <div className={`text-lg font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-card-foreground"}`}>
-            {weather.temperature}°C
+          <Thermometer className="mx-auto h-5 w-5 text-blue-400 mb-1" />
+          <div className="text-xs text-muted-foreground mb-1">Temp</div>
+          <div className={`text-2xl font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-white"}`}>
+            {weather.temperature}°
           </div>
         </div>
 
         <div>
-          <Wind className="mx-auto h-4 w-4 text-mesta-orange" />
-          <div className="text-xs text-muted-foreground">Vind</div>
+          <Wind className="mx-auto h-5 w-5 text-primary mb-1" />
+          <div className="text-xs text-muted-foreground mb-1">Vind</div>
           <div
-            className={`text-lg font-bold ${
-              weather.windSpeed > 15
-                ? "text-mesta-orange"
-                : weather.windSpeed > 10
-                  ? "text-yellow-400"
-                  : "text-card-foreground"
+            className={`text-2xl font-bold ${
+              weather.windSpeed > 15 ? "text-primary" : weather.windSpeed > 10 ? "text-yellow-400" : "text-white"
             }`}
           >
-            {weather.windSpeed} m/s
+            {weather.windSpeed}
           </div>
         </div>
 
         <div>
-          <Droplets className="mx-auto h-4 w-4 text-blue-300" />
-          <div className="text-xs text-muted-foreground">Nedbør</div>
-          <div className={`text-lg font-bold ${weather.precipitation > 2 ? "text-blue-400" : "text-card-foreground"}`}>
-            {weather.precipitation} mm
+          <Droplets className="mx-auto h-5 w-5 text-blue-300 mb-1" />
+          <div className="text-xs text-muted-foreground mb-1">Nedbør</div>
+          <div className={`text-2xl font-bold ${weather.precipitation > 2 ? "text-blue-400" : "text-white"}`}>
+            {weather.precipitation}
           </div>
         </div>
       </div>
 
-      <div className="mt-4 border-t border-border pt-3">
+      <div className="mt-5 border-t-2 border-border pt-4">
         <div
-          className={`text-center text-sm font-medium ${
+          className={`text-center text-base font-bold ${
             weather.condition === "danger"
               ? "text-red-500"
               : weather.condition === "caution"
@@ -161,9 +161,12 @@ const WeatherBentoCard = memo(function WeatherBentoCard({
                 : "text-green-500"
           }`}
         >
-          {weather.conditionText} - {weather.exposureScore}
+          {weather.conditionText}
         </div>
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+        <div className="text-center text-sm text-muted-foreground mt-1 font-medium">
+          Eksponering: {weather.exposureScore}
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className={`h-full ${
               weather.condition === "danger"
@@ -194,7 +197,7 @@ const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weath
 
   return (
     <Card
-      className="border-border bg-card p-4 cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all"
+      className="border-2 border-border bg-card/50 p-4 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.25)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.4)] hover:scale-[1.02] transition-all"
       role="link"
       aria-label={`Åpne værvarsel for ${weather.location} på yr.no`}
       tabIndex={0}
@@ -202,50 +205,50 @@ const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weath
       onKeyDown={handleKeyDown}
     >
       <div className="mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-bold leading-tight tracking-tight text-card-foreground">{weather.location}</h3>
-          <span className="text-xs text-muted-foreground">yr.no →</span>
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-xl font-bold leading-tight tracking-tight text-white">{weather.location}</h3>
         </div>
-        <Badge variant="outline" className="mt-1 border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
-          {weather.typeText}
-        </Badge>
+        <div className="flex items-center gap-2 mt-1">
+          <Badge variant="outline" className="border-muted-foreground/50 bg-muted/30 text-xs text-muted-foreground">
+            {weather.typeText}
+          </Badge>
+          <span className="text-xs text-primary/80 font-medium">yr.no →</span>
+        </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Thermometer className="h-4 w-4 text-blue-400" />
-            <span className="text-xs text-muted-foreground">Temp</span>
+            <Thermometer className="h-5 w-5 text-blue-400" />
+            <span className="text-sm text-muted-foreground font-medium">Temp</span>
           </div>
-          <span className={`text-lg font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-card-foreground"}`}>
+          <span className={`text-xl font-bold ${weather.temperature < 0 ? "text-blue-400" : "text-white"}`}>
             {weather.temperature}°C
           </span>
         </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Wind className="h-4 w-4 text-mesta-orange" />
-            <span className="text-xs text-muted-foreground">Vind</span>
+            <Wind className="h-5 w-5 text-primary" />
+            <span className="text-sm text-muted-foreground font-medium">Vind</span>
           </div>
-          <span
-            className={`text-lg font-bold ${weather.windSpeed > 15 ? "text-mesta-orange" : "text-card-foreground"}`}
-          >
+          <span className={`text-xl font-bold ${weather.windSpeed > 15 ? "text-primary" : "text-white"}`}>
             {weather.windSpeed} m/s
           </span>
         </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Droplets className="h-4 w-4 text-blue-300" />
-            <span className="text-xs text-muted-foreground">Nedbør</span>
+            <Droplets className="h-5 w-5 text-blue-300" />
+            <span className="text-sm text-muted-foreground font-medium">Nedbør</span>
           </div>
-          <span className="text-lg font-bold text-card-foreground">{weather.precipitation} mm</span>
+          <span className="text-xl font-bold text-white">{weather.precipitation} mm</span>
         </div>
       </div>
 
-      <div className="mt-3 border-t border-border pt-2">
+      <div className="mt-4 border-t-2 border-border pt-3">
         <div
-          className={`text-center text-sm font-medium ${
+          className={`text-center text-sm font-bold ${
             weather.condition === "danger"
               ? "text-red-500"
               : weather.condition === "caution"
@@ -253,9 +256,9 @@ const CompactWeatherCard = memo(function CompactWeatherCard({ weather }: { weath
                 : "text-green-500"
           }`}
         >
-          {weather.conditionText} - {weather.exposureScore}
+          {weather.conditionText} · {weather.exposureScore}
         </div>
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className={`h-full ${
               weather.condition === "danger"

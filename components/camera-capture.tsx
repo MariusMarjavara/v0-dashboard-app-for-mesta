@@ -86,7 +86,7 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
     const dateText = formatDateTime()
 
     let gpsMetadata: { lat: number; lon: number; vegreferanse: string } | null = null
-    let locationText = "GPS utilgjengelig"
+    let locationText: string | null = null
 
     try {
       const pos = await getCurrentPosition()
@@ -95,26 +95,32 @@ export function CameraCapture({ onCapture, onCancel }: CameraCaptureProps) {
 
       const res = await fetch(`/api/nvdb/vegreferanse?lat=${lat}&lon=${lon}`)
       const data = await res.json()
-      const vegreferanse = data.vegreferanse || "Ikke på veg"
+      const vegreferanse = data.vegreferanse || null
 
-      locationText = vegreferanse
-      gpsMetadata = { lat, lon, vegreferanse }
+      if (vegreferanse) {
+        locationText = vegreferanse
+        gpsMetadata = { lat, lon, vegreferanse }
+      } else {
+        gpsMetadata = { lat, lon, vegreferanse: "" }
+      }
     } catch {
       locationText = "GPS utilgjengelig"
     }
 
-    const boxHeight = 100
+    const hasLocationText = locationText !== null
+    const boxHeight = hasLocationText ? 100 : 60
     const boxPadding = 20
 
-    // Semi-transparent black background for text
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
     ctx.fillRect(boxPadding, canvas.height - boxHeight - boxPadding, canvas.width - boxPadding * 2, boxHeight)
 
-    // White text
     ctx.fillStyle = "#ffffff"
     ctx.font = "bold 28px sans-serif"
     ctx.fillText(dateText, boxPadding * 2, canvas.height - boxHeight / 2 - 10)
-    ctx.fillText(locationText, boxPadding * 2, canvas.height - boxHeight / 2 + 30)
+
+    if (hasLocationText) {
+      ctx.fillText(locationText, boxPadding * 2, canvas.height - boxHeight / 2 + 30)
+    }
 
     canvas.toBlob(
       (blob) => {

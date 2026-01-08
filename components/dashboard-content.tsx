@@ -323,7 +323,7 @@ export function DashboardContent({
   return (
     <div className="flex-1 overflow-y-auto pb-20">
       {/* Header */}
-      <header className="border-b border-border bg-mesta-navy-light sticky top-0 z-50">
+      <header className="border-b border-border bg-card shadow-card sticky top-0 z-50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <MestaLogo />
@@ -331,16 +331,16 @@ export function DashboardContent({
               <div className="hidden md:flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <User className="h-4 w-4" />
-                  <span>{effectiveName || userEmail}</span>
+                  <span className="text-foreground/90">{effectiveName || userEmail}</span>
                 </div>
                 {contractArea && (
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-mesta-navy rounded-lg border border-border">
-                    <MapPin className="h-3.5 w-3.5 text-mesta-orange" />
-                    <span className="text-xs font-medium text-foreground">{contractArea}</span>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary rounded-lg border border-border shadow-sm">
+                    <MapPin className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-semibold text-foreground">{contractArea}</span>
                   </div>
                 )}
                 {isMestaUser && (
-                  <span className="px-2 py-0.5 bg-mesta-orange/20 text-mesta-orange text-xs rounded-full font-medium">
+                  <span className="px-2.5 py-1 bg-primary/25 text-primary text-xs rounded-full font-semibold ring-1 ring-primary/30">
                     Mesta
                   </span>
                 )}
@@ -350,7 +350,7 @@ export function DashboardContent({
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="text-muted-foreground hover:text-white touch-manipulation"
+                className="text-muted-foreground hover:text-white hover:bg-secondary/80 touch-manipulation"
               >
                 <LogOut className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Logg ut</span>
@@ -360,15 +360,15 @@ export function DashboardContent({
           <div className="md:hidden pb-3 space-y-2">
             {contractArea && (
               <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-mesta-orange" />
-                <span className="text-foreground font-medium">{contractArea}</span>
+                <MapPin className="h-4 w-4 text-primary" />
+                <span className="text-foreground font-semibold">{contractArea}</span>
               </div>
             )}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-3.5 w-3.5" />
-              <span className="truncate">{effectiveName || userEmail}</span>
+              <span className="truncate text-foreground/90">{effectiveName || userEmail}</span>
               {isMestaUser && (
-                <span className="px-2 py-0.5 bg-mesta-orange/20 text-mesta-orange text-xs rounded-full font-medium">
+                <span className="px-2 py-0.5 bg-primary/25 text-primary text-xs rounded-full font-semibold ring-1 ring-primary/30">
                   Mesta
                 </span>
               )}
@@ -381,56 +381,57 @@ export function DashboardContent({
       <OperationalStatusBanner />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {activeForm || showSuccess || needsName ? (
           <div className="max-w-xl mx-auto">{renderForm()}</div>
         ) : (
           <WeatherProvider contractId={"" || "default"}>
             {/* Mobile/Tablet Registration Section */}
-            <section className="mb-6 sm:mb-8">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-white">Registreringer</h2>
+            <section className="mb-10 sm:mb-14">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">Registreringer</h2>
                 <div className="flex items-center gap-2">
                   <ExportRegistrationsButton />
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => router.push("/qr")}
-                    className="border-border text-white hover:bg-secondary bg-transparent touch-manipulation"
+                    className="border-2 border-border text-white hover:bg-secondary hover:border-primary bg-transparent touch-manipulation"
                   >
                     <QrCode className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
                 {registrationCards.map((card) => (
                   <RegistrationCard key={card.id} {...card} onClick={() => handleFormClick(card.id)} />
                 ))}
               </div>
             </section>
 
-            {/* Skillelinje og seksjonstittel for ekstern informasjon */}
-            <div className="relative mb-6 sm:mb-8">
+            <div className="relative mb-10 sm:mb-14">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
+                <div className="w-full border-t-2 border-border/90"></div>
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-mesta-navy px-4 text-sm text-muted-foreground">Værdata og eksterne systemer</span>
+                <span className="bg-background px-5 py-2 text-base font-semibold text-muted-foreground">
+                  Værdata og eksterne systemer
+                </span>
               </div>
             </div>
 
-            <section className="mb-6 sm:mb-8">
+            <section className="mb-8 sm:mb-12">
               <TopExposedAreas />
             </section>
 
-            <section className="mb-6 sm:mb-8">
+            <section className="mb-8 sm:mb-12">
               <WeatherSources />
             </section>
 
             {/* External Apps Section */}
-            <section className="mb-8 sm:mb-12">
-              <h2 className="text-lg sm:text-xl font-semibold text-white mb-4 sm:mb-6">Nyttige lenker</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            <section className="mb-10 sm:mb-14">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8">Nyttige lenker</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
                 {filteredApps.map((app) => (
                   <AppCard key={app.id} app={app} />
                 ))}

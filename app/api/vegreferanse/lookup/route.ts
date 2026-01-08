@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     }
 
     const primaryRes = await fetch(
-      `https://nvdbapiles-v3.atlas.vegvesen.no/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${MAX_DISTANCE}&srid=4326`,
+      `https://nvdbapiles.atlas.vegvesen.no/vegnett/api/v4/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${MAX_DISTANCE}`,
       {
         headers: {
           "X-Client": "mesta-drift-app",
@@ -40,8 +40,8 @@ export async function POST(req: Request) {
 
     if (primaryRes.ok) {
       const data = await primaryRes.json()
-      const vegreferanse = data?.vegreferanse?.kortform
-      const avstand = data?.avstand || 0
+      const vegreferanse = data?.[0]?.vegreferanse?.kortform
+      const avstand = data?.[0]?.avstand || 0
 
       if (vegreferanse) {
         cache.set(cacheKey, { vegreferanse, avstand, timestamp: Date.now() })
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     }
 
     const fallbackRes = await fetch(
-      `https://nvdbapiles-v3.atlas.vegvesen.no/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${FALLBACK_DISTANCE}&srid=4326`,
+      `https://nvdbapiles.atlas.vegvesen.no/vegnett/api/v4/posisjon?lat=${lat}&lon=${lon}&maks_avstand=${FALLBACK_DISTANCE}`,
       {
         headers: {
           "X-Client": "mesta-drift-app",
@@ -66,8 +66,8 @@ export async function POST(req: Request) {
 
     if (fallbackRes.ok) {
       const fallbackData = await fallbackRes.json()
-      const vegreferanse = fallbackData?.vegreferanse?.kortform
-      const avstand = fallbackData?.avstand || 0
+      const vegreferanse = fallbackData?.[0]?.vegreferanse?.kortform
+      const avstand = fallbackData?.[0]?.avstand || 0
 
       if (vegreferanse) {
         const estimatedRef = `~${vegreferanse}`
